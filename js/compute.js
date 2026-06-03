@@ -35,6 +35,18 @@ window.MOA = window.MOA || {};
     return {open:open, content:content, effort:effort};
   };
 
+  /* goals: progress toward target KPIs (targets live in settings, never derived) */
+  M.goals = function(){
+    var k=M.kpis(), t=(S().settings && S().settings.targets) || {};
+    function ratio(v, target){ target=parseFloat(target)||0; return target>0 ? v/target : 0; }
+    var comp=Math.round(k.completion*100);
+    return [
+      {key:'published',  label:'محتوى منشور',        value:k.pub,   target:parseFloat(t.published)||0,  unit:'',  ratio:ratio(k.pub, t.published)},
+      {key:'completion', label:'نسبة إنجاز المهام',  value:comp,    target:parseFloat(t.completion)||0, unit:'%', ratio:ratio(comp, t.completion)},
+      {key:'content',    label:'إجمالي المحتوى',      value:k.cTotal,target:parseFloat(t.content)||0,    unit:'',  ratio:ratio(k.cTotal, t.content)}
+    ];
+  };
+
   M.weeklyTrend = function(){
     var weeks=S().lists.weeks, c=S().content, cum=0;
     return weeks.map(function(w){

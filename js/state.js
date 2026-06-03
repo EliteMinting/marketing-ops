@@ -17,6 +17,7 @@ window.MOA = window.MOA || {};
     s.content=s.content||[]; s.tasks=s.tasks||[]; s.team=s.team||[];
     s.lists=Object.assign(clone(M.LISTS), s.lists||{});
     s.settings=Object.assign({period:'يونيو 2026',updatedAt:todayISO()}, s.settings||{});
+    s.settings.targets=Object.assign({published:10,completion:80,content:12}, s.settings.targets||{});
     return s;
   }
 

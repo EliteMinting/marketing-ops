@@ -81,9 +81,20 @@ window.MOA = window.MOA || {};
     var status = M.statusDistribution();
     var legend = '<div class="legend"><span><i style="background:' + M.HEX.progress + '"></i> أسبوعي</span><span><i style="background:' + M.HEX.ink + '"></i> تراكمي</span></div>';
     var emptyMini = '<div class="empty" style="padding:24px">أضِف أعضاء الفريق لعرض هذا الرسم.</div>';
+    // goals: progress toward target KPIs
+    var goalCards = M.goals().map(function (g) {
+      var rc = Math.max(0, Math.min(1, g.ratio));
+      var hex = g.ratio >= 1 ? M.HEX.done : M.HEX.progress;
+      var reached = g.target > 0 && g.value >= g.target;
+      var cap = g.value + g.unit + ' / ' + g.target + g.unit + (reached ? ' ✓ تحقّق' : ' هدف');
+      return '<div class="card"><div class="card-title">' + g.label + '</div><div class="donut-wrap">' +
+        M.donut(rc, hex) + '<div class="donut-cap">' + cap + '</div></div></div>';
+    }).join('');
     var wrap = el('div', 'wrap');
     wrap.innerHTML =
       '<div class="grid kpis">' + kpi + '</div>' +
+      '<div class="section-title">الأهداف والمؤشرات المستهدفة <span style="font-weight:500;color:var(--muted);font-size:12px">حرّر القيم من الإعدادات</span></div>' +
+      '<div class="goals-grid">' + goalCards + '</div>' +
       '<div class="grid charts">' +
       '<div class="card col-3"><div class="card-title">إنجاز المهام</div><div class="donut-wrap">' + M.donut(k.completion, M.HEX.approved) + '<div class="donut-cap">' + k.done + ' من ' + k.total + ' مهمة</div></div></div>' +
       '<div class="card col-3"><div class="card-title">نشر المحتوى</div><div class="donut-wrap">' + M.donut(k.publish, M.HEX.done) + '<div class="donut-cap">' + k.pub + ' من ' + k.cTotal + ' محتوى</div></div></div>' +
@@ -257,6 +268,20 @@ window.MOA = window.MOA || {};
     zone.appendChild(bExp); zone.appendChild(bImp); zone.appendChild(bRes); zone.appendChild(bClr);
     dc.appendChild(zone);
     wrap.appendChild(dc);
+
+    // targets / goals
+    var tc = el('div', 'card'); tc.style.marginTop = '16px';
+    tc.innerHTML = '<div class="card-title">الأهداف والمؤشرات المستهدفة</div>';
+    var tg = S().settings.targets || (S().settings.targets = { published: 10, completion: 80, content: 12 });
+    [['published', 'هدف المحتوى المنشور', ''], ['completion', 'هدف نسبة الإنجاز', '%'], ['content', 'هدف إجمالي المحتوى', '']]
+      .forEach(function (p) {
+        var row = el('div', 'le-row'); row.style.maxWidth = '320px';
+        row.innerHTML = '<span style="color:var(--muted);font-size:13px">' + p[1] + (p[2] ? ' (' + p[2] + ')' : '') + ':</span>';
+        var inp = el('input'); inp.type = 'number'; inp.min = '0'; inp.value = (tg[p[0]] != null ? tg[p[0]] : '');
+        inp.addEventListener('input', function () { tg[p[0]] = inp.value === '' ? 0 : parseFloat(inp.value); M.saveQuiet(); });
+        row.appendChild(inp); tc.appendChild(row);
+      });
+    wrap.appendChild(tc);
 
     // lists
     var grid = el('div', 'settings-grid'); grid.style.marginTop = '16px';
