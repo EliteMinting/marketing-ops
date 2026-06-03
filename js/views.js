@@ -343,28 +343,42 @@ window.MOA = window.MOA || {};
       });
     wrap.appendChild(tc);
 
-    // AI assistant (OpenRouter)
+    // AI assistant (multi-provider: OpenRouter / Groq)
+    var aiCfg = M.ai.getConfig();
+    var prov = M.ai.PROVIDERS[aiCfg.provider];
     var ac = el('div', 'card'); ac.style.marginTop = '16px';
-    ac.innerHTML = '<div class="card-title">المساعد الذكي (OpenRouter)</div>';
+    ac.innerHTML = '<div class="card-title">المساعد الذكي</div>';
+    // provider selector
+    var prow = el('div', 'le-row'); prow.style.maxWidth = '440px';
+    prow.innerHTML = '<span style="color:var(--muted);font-size:13px">المزوّد:</span>';
+    var psel = el('select', 'filter-select');
+    Object.keys(M.ai.PROVIDERS).forEach(function (id) {
+      var op = document.createElement('option'); op.value = id; op.textContent = M.ai.PROVIDERS[id].label;
+      if (id === aiCfg.provider) op.selected = true; psel.appendChild(op);
+    });
+    psel.addEventListener('change', function () { M.ai.setConfig({ provider: psel.value }); M.showView('settings'); });
+    prow.appendChild(psel); ac.appendChild(prow);
+    // key (per provider)
     var krow = el('div', 'le-row'); krow.style.maxWidth = '440px';
-    krow.innerHTML = '<span style="color:var(--muted);font-size:13px">المفتاح:</span>';
-    var kin = el('input'); kin.type = 'password'; kin.placeholder = 'sk-or-...'; kin.value = M.ai.getKey(); kin.autocomplete = 'off';
+    krow.innerHTML = '<span style="color:var(--muted);font-size:13px">مفتاح ' + prov.label + ':</span>';
+    var kin = el('input'); kin.type = 'password'; kin.placeholder = prov.keyHint; kin.value = M.ai.getKey(); kin.autocomplete = 'off';
     kin.addEventListener('input', function () { M.ai.setKey(kin.value.trim()); });
     krow.appendChild(kin); ac.appendChild(krow);
+    // model (per provider)
     var mrow = el('div', 'le-row'); mrow.style.maxWidth = '440px';
     mrow.innerHTML = '<span style="color:var(--muted);font-size:13px">النموذج:</span>';
-    var min = el('input'); min.setAttribute('list', 'aiModelsList'); min.value = M.ai.getConfig().model; min.placeholder = 'معرّف النموذج';
-    min.addEventListener('input', function () { M.ai.setConfig({ model: min.value.trim() || M.ai.MODELS[0].id }); });
+    var min = el('input'); min.setAttribute('list', 'aiModelsList'); min.value = aiCfg.model; min.placeholder = 'معرّف النموذج';
+    min.addEventListener('input', function () { M.ai.setConfig({ model: min.value.trim() || prov.models[0].id }); });
     var dl = document.createElement('datalist'); dl.id = 'aiModelsList';
-    M.ai.MODELS.forEach(function (o) { var op = document.createElement('option'); op.value = o.id; op.textContent = o.label; dl.appendChild(op); });
+    prov.models.forEach(function (o) { var op = document.createElement('option'); op.value = o.id; op.textContent = o.label; dl.appendChild(op); });
     mrow.appendChild(min); mrow.appendChild(dl); ac.appendChild(mrow);
     var note = el('div'); note.style.cssText = 'color:var(--muted);font-size:12.5px;line-height:1.8;margin-top:8px';
-    note.innerHTML = 'المفتاح يُحفظ في متصفحك فقط (لا يُرفع ولا يدخل في تصدير JSON). ' +
+    note.innerHTML = 'المفتاح يُحفظ في متصفحك فقط لكل مزوّد (لا يُرفع ولا يدخل في تصدير JSON). ' +
       '<b>تنبيه:</b> محتوى المحادثة ولقطة من بياناتك تُرسل لمزوّد النموذج. ' +
-      '<a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style="color:var(--primary-600)">الحصول على مفتاح ↗</a>';
+      '<a href="' + prov.keysUrl + '" target="_blank" rel="noopener" style="color:var(--primary-600)">الحصول على مفتاح ' + prov.label + ' ↗</a>';
     ac.appendChild(note);
     var akz = el('div', 'danger-zone');
-    var bClrKey = el('button', 'btn btn-ghost btn-sm'); bClrKey.textContent = 'مسح المفتاح';
+    var bClrKey = el('button', 'btn btn-ghost btn-sm'); bClrKey.textContent = 'مسح مفتاح ' + prov.label;
     bClrKey.onclick = function () { M.ai.setKey(''); M.showView('settings'); M.toast('تم مسح المفتاح', 'info'); };
     akz.appendChild(bClrKey); ac.appendChild(akz);
     wrap.appendChild(ac);

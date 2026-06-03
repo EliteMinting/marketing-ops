@@ -8,26 +8,61 @@ window.MOA = window.MOA || {};
   M.ai = {};
 
   /* ---------- config (kept OUT of M.state so the key never lands in exported JSON) ---------- */
-  var KEY_K = 'moa.ai.key', CFG_K = 'moa.ai';
-  M.ai.MODELS = [
-    { id: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B (سريع)' },
-    { id: 'mistralai/mistral-7b-instruct', label: 'Mistral 7B (سريع)' },
-    { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3 (أقوى)' },
-    { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
-    { id: 'qwen/qwen-2.5-72b-instruct', label: 'Qwen2.5 72B' }
-  ];
-  M.ai.getKey = function () { try { return localStorage.getItem(KEY_K) || ''; } catch (e) { return ''; } };
-  M.ai.setKey = function (v) { try { v ? localStorage.setItem(KEY_K, v) : localStorage.removeItem(KEY_K); } catch (e) {} };
+  var CFG_K = 'moa.ai';
+  /* multi-provider: each is OpenAI-compatible */
+  M.ai.PROVIDERS = {
+    openrouter: {
+      label: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+      referer: true, keyHint: 'sk-or-...', keysUrl: 'https://openrouter.ai/keys',
+      models: [
+        { id: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B (سريع)' },
+        { id: 'mistralai/mistral-7b-instruct', label: 'Mistral 7B (سريع)' },
+        { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3 (أقوى)' },
+        { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+        { id: 'qwen/qwen-2.5-72b-instruct', label: 'Qwen2.5 72B' }
+      ]
+    },
+    groq: {
+      label: 'Groq', endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+      referer: false, keyHint: 'gsk_...', keysUrl: 'https://console.groq.com/keys',
+      models: [
+        { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (فائق السرعة)' },
+        { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
+        { id: 'gemma2-9b-it', label: 'Gemma2 9B' },
+        { id: 'qwen-2.5-32b', label: 'Qwen2.5 32B' }
+      ]
+    }
+  };
+  function provId() { return M.ai.getConfig().provider; }
+  function keyName(p) { return 'moa.ai.key.' + p; }
+  M.ai.getKey = function (provider) {
+    provider = provider || provId();
+    try {
+      var v = localStorage.getItem(keyName(provider));
+      if (!v && provider === 'openrouter') v = localStorage.getItem('moa.ai.key'); // legacy
+      return v || '';
+    } catch (e) { return ''; }
+  };
+  M.ai.setKey = function (provider, v) {
+    if (arguments.length === 1) { v = provider; provider = provId(); }
+    try { v ? localStorage.setItem(keyName(provider), v) : localStorage.removeItem(keyName(provider)); } catch (e) {}
+  };
   M.ai.getConfig = function () {
     var c = {}; try { c = JSON.parse(localStorage.getItem(CFG_K) || '{}') || {}; } catch (e) {}
-    if (!c.model) c.model = M.ai.MODELS[0].id;
+    if (!c.provider || !M.ai.PROVIDERS[c.provider]) c.provider = 'openrouter';
+    var prov = M.ai.PROVIDERS[c.provider];
+    if (!c.model) c.model = prov.models[0].id;
     return c;
   };
   M.ai.setConfig = function (patch) {
-    var c = M.ai.getConfig(); for (var k in patch) c[k] = patch[k];
+    var c = M.ai.getConfig();
+    for (var k in patch) c[k] = patch[k];
+    // when switching provider, default the model to that provider's first if not explicitly set
+    if (patch.provider && !patch.model) c.model = M.ai.PROVIDERS[patch.provider].models[0].id;
     try { localStorage.setItem(CFG_K, JSON.stringify(c)); } catch (e) {}
     return c;
   };
+  M.ai.models = function () { return M.ai.PROVIDERS[provId()].models; };
 
   /* ---------- tool schema (OpenAI/OpenRouter compatible) ---------- */
   function lists() { return S().lists; }
@@ -112,8 +147,8 @@ window.MOA = window.MOA || {};
       '=== لقطة الحالة ===\n' + snapshot();
   }
 
-  /* ---------- OpenRouter client ---------- */
-  var ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+  /* ---------- OpenAI-compatible client (OpenRouter / Groq) ---------- */
+  function provider() { return M.ai.PROVIDERS[M.ai.getConfig().provider]; }
   function buildBody(messages, stream) {
     var cfg = M.ai.getConfig();
     var b = {
@@ -122,22 +157,22 @@ window.MOA = window.MOA || {};
       tools: M.ai.tools(),
       tool_choice: 'auto',
       temperature: 0.3,
-      max_tokens: 800,
-      provider: { sort: 'throughput' } // route to the fastest available provider
+      max_tokens: 800
     };
+    if (cfg.provider === 'openrouter') b.provider = { sort: 'throughput' }; // OpenRouter-only routing hint
     if (stream) b.stream = true;
     return b;
   }
   function headers(key) {
     var h = { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' };
-    try { h['HTTP-Referer'] = location.origin; h['X-Title'] = 'Marketing Ops'; } catch (e) {}
+    if (provider().referer) { try { h['HTTP-Referer'] = location.origin; h['X-Title'] = 'Marketing Ops'; } catch (e) {} }
     return h;
   }
 
   M.ai.chat = function (messages) {
     var key = M.ai.getKey();
     if (!key) return Promise.reject(new Error('no-key'));
-    return fetch(ENDPOINT, { method: 'POST', headers: headers(key), body: JSON.stringify(buildBody(messages, false)) })
+    return fetch(provider().endpoint, { method: 'POST', headers: headers(key), body: JSON.stringify(buildBody(messages, false)) })
       .then(function (r) {
         return r.json().then(function (j) {
           if (!r.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status));
@@ -150,7 +185,7 @@ window.MOA = window.MOA || {};
   M.ai.chatStream = function (messages, h) {
     var key = M.ai.getKey();
     if (!key) { h.onError(new Error('no-key')); return; }
-    fetch(ENDPOINT, { method: 'POST', headers: headers(key), body: JSON.stringify(buildBody(messages, true)) })
+    fetch(provider().endpoint, { method: 'POST', headers: headers(key), body: JSON.stringify(buildBody(messages, true)) })
       .then(function (resp) {
         if (!resp.ok || !resp.body || !resp.body.getReader) {
           return resp.json().catch(function () { return {}; }).then(function (j) {
