@@ -71,6 +71,10 @@ window.MOA = window.MOA || {};
   M.currentView = 'dashboard';
   M.views = {};
 
+  /* AI assistant conversation state (in-memory, not persisted) */
+  var aiHistory = [];
+  var aiPending = null;
+
   /* ---------- Dashboard ---------- */
   M.views.dashboard = function (c) {
     var k = M.kpis();
@@ -295,6 +299,32 @@ window.MOA = window.MOA || {};
         row.appendChild(inp); tc.appendChild(row);
       });
     wrap.appendChild(tc);
+
+    // AI assistant (OpenRouter)
+    var ac = el('div', 'card'); ac.style.marginTop = '16px';
+    ac.innerHTML = '<div class="card-title">المساعد الذكي (OpenRouter)</div>';
+    var krow = el('div', 'le-row'); krow.style.maxWidth = '440px';
+    krow.innerHTML = '<span style="color:var(--muted);font-size:13px">المفتاح:</span>';
+    var kin = el('input'); kin.type = 'password'; kin.placeholder = 'sk-or-...'; kin.value = M.ai.getKey(); kin.autocomplete = 'off';
+    kin.addEventListener('input', function () { M.ai.setKey(kin.value.trim()); });
+    krow.appendChild(kin); ac.appendChild(krow);
+    var mrow = el('div', 'le-row'); mrow.style.maxWidth = '440px';
+    mrow.innerHTML = '<span style="color:var(--muted);font-size:13px">النموذج:</span>';
+    var min = el('input'); min.setAttribute('list', 'aiModelsList'); min.value = M.ai.getConfig().model; min.placeholder = 'معرّف النموذج';
+    min.addEventListener('input', function () { M.ai.setConfig({ model: min.value.trim() || M.ai.MODELS[0].id }); });
+    var dl = document.createElement('datalist'); dl.id = 'aiModelsList';
+    M.ai.MODELS.forEach(function (o) { var op = document.createElement('option'); op.value = o.id; op.textContent = o.label; dl.appendChild(op); });
+    mrow.appendChild(min); mrow.appendChild(dl); ac.appendChild(mrow);
+    var note = el('div'); note.style.cssText = 'color:var(--muted);font-size:12.5px;line-height:1.8;margin-top:8px';
+    note.innerHTML = 'المفتاح يُحفظ في متصفحك فقط (لا يُرفع ولا يدخل في تصدير JSON). ' +
+      '<b>تنبيه:</b> محتوى المحادثة ولقطة من بياناتك تُرسل لمزوّد النموذج. ' +
+      '<a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style="color:var(--primary-600)">الحصول على مفتاح ↗</a>';
+    ac.appendChild(note);
+    var akz = el('div', 'danger-zone');
+    var bClrKey = el('button', 'btn btn-ghost btn-sm'); bClrKey.textContent = 'مسح المفتاح';
+    bClrKey.onclick = function () { M.ai.setKey(''); M.showView('settings'); M.toast('تم مسح المفتاح', 'info'); };
+    akz.appendChild(bClrKey); ac.appendChild(akz);
+    wrap.appendChild(ac);
 
     // lists
     var grid = el('div', 'settings-grid'); grid.style.marginTop = '16px';
@@ -578,6 +608,117 @@ window.MOA = window.MOA || {};
         '<span class="pill-tag p-' + M.colorKey(it.status) + '">' + esc(it.status || '') + '</span>';
     }, 'tasks'));
     c.appendChild(wrap);
+  };
+
+  /* ---------- AI Assistant ---------- */
+  M.views.assistant = function (c) {
+    c.appendChild(head('المساعد الذكي', 'تحدّث مع المساعد لإدارة المحتوى والمهام — يقترح التغييرات وتؤكّدها أنت'));
+    var wrap = el('div', 'wrap');
+
+    if (!M.ai || !M.ai.getKey()) {
+      var setup = el('div', 'card');
+      setup.innerHTML = '<div class="card-title">يلزم مفتاح OpenRouter</div>' +
+        '<p style="color:var(--muted);font-size:13px;line-height:1.8">أضِف مفتاح OpenRouter الخاص بك من صفحة الإعدادات. ' +
+        'المفتاح يُحفظ في متصفحك فقط ولا يُرفع للريبو ولا يدخل في تصدير JSON.<br>' +
+        '<b>تنبيه خصوصية:</b> محتوى محادثتك ولقطة مُلخّصة من بياناتك تُرسل لمزوّد النموذج عبر OpenRouter.</p>';
+      var go = el('button', 'btn btn-primary'); go.textContent = 'الذهاب للإعدادات'; go.style.marginTop = '12px';
+      go.onclick = function () { M.showView('settings'); };
+      var link = el('a'); link.href = 'https://openrouter.ai/keys'; link.target = '_blank'; link.rel = 'noopener';
+      link.textContent = 'الحصول على مفتاح ↗'; link.className = 'btn btn-ghost'; link.style.cssText = 'margin-top:12px;margin-inline-start:8px;text-decoration:none';
+      setup.appendChild(go); setup.appendChild(link);
+      wrap.appendChild(setup); c.appendChild(wrap); return;
+    }
+
+    var chat = el('div', 'chat');
+    var msgs = el('div', 'chat-msgs'); chat.appendChild(msgs);
+    var inputRow = el('div', 'chat-input');
+    var ta = el('textarea'); ta.rows = 1; ta.placeholder = 'اكتب رسالتك… مثال: أضِف مهمة تصميم بوستر السبت لخالد بأولوية عالية';
+    var send = el('button', 'btn btn-primary'); send.textContent = 'إرسال';
+    inputRow.appendChild(ta); inputRow.appendChild(send); chat.appendChild(inputRow);
+    var tools = el('div', 'chat-tools');
+    var modelTag = el('span', 'chat-model'); modelTag.textContent = 'النموذج: ' + M.ai.getConfig().model;
+    var clearBtn = el('button', 'btn btn-ghost btn-sm'); clearBtn.textContent = 'مسح المحادثة';
+    clearBtn.onclick = function () { aiHistory = []; aiPending = null; renderMsgs(); };
+    tools.appendChild(modelTag); tools.appendChild(clearBtn); chat.appendChild(tools);
+    wrap.appendChild(chat); c.appendChild(wrap);
+
+    var busy = false;
+    function bubble(role, text) { var b = el('div', 'msg ' + (role === 'user' ? 'user' : 'ai')); b.textContent = text; return b; }
+    function typing(on) {
+      var ex = msgs.querySelector('.typing');
+      if (on && !ex) { var t = el('div', 'msg ai typing'); t.innerHTML = '<span></span><span></span><span></span>'; msgs.appendChild(t); msgs.scrollTop = msgs.scrollHeight; }
+      else if (!on && ex) ex.remove();
+    }
+    function actionsCard() {
+      var card = el('div', 'ai-actions');
+      var t = el('div', 'aia-title'); t.textContent = 'إجراءات مقترحة'; card.appendChild(t);
+      aiPending.items.forEach(function (it) {
+        var row = el('div', 'aia-row ' + (it.ok ? 'ok' : 'bad'));
+        row.textContent = it.ok ? ('• ' + M.ai.describe(it.name, it.clean)) : ('✗ ' + (M.ai.describe(it.name, it.arguments || {})) + ' — ' + it.error);
+        card.appendChild(row);
+      });
+      var okCount = aiPending.items.filter(function (i) { return i.ok; }).length;
+      var bar = el('div', 'aia-bar');
+      var apply = el('button', 'btn btn-primary btn-sm'); apply.textContent = 'تطبيق (' + okCount + ')'; apply.disabled = !okCount;
+      apply.onclick = applyPending;
+      var ign = el('button', 'btn btn-ghost btn-sm'); ign.textContent = 'تجاهل';
+      ign.onclick = function () { resolvePending('skipped'); aiHistory.push({ role: 'assistant', content: '↩︎ تم تجاهل الاقتراح.' }); renderMsgs(); };
+      bar.appendChild(apply); bar.appendChild(ign); card.appendChild(bar);
+      return card;
+    }
+    function renderMsgs() {
+      msgs.innerHTML = '';
+      if (!aiHistory.length) { var h = el('div', 'chat-hint'); h.textContent = 'ابدأ المحادثة — مثلاً: «كم مهمة متأخرة؟» أو «أضِف محتوى ريل لإنستقرام لسارة».'; msgs.appendChild(h); }
+      aiHistory.forEach(function (m) {
+        if (m.role === 'user') msgs.appendChild(bubble('user', m.content));
+        else if (m.role === 'assistant' && m.content) msgs.appendChild(bubble('ai', m.content));
+      });
+      if (aiPending) msgs.appendChild(actionsCard());
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+    function resolvePending(result) {
+      if (!aiPending) return;
+      aiPending.items.forEach(function (it) { if (it.id) aiHistory.push({ role: 'tool', tool_call_id: it.id, content: result }); });
+      aiPending = null;
+    }
+    function applyPending() {
+      if (!aiPending) return;
+      var undos = [];
+      aiPending.items.forEach(function (it) { if (it.ok) undos.push(M.ai.apply(it.name, it.clean)); });
+      M.save(); if (M.refreshBadges) M.refreshBadges();
+      var n = undos.length;
+      resolvePending('applied');
+      aiHistory.push({ role: 'assistant', content: '✅ تم تطبيق ' + n + ' تغيير على بياناتك.' });
+      renderMsgs();
+      M.toastUndo('تم تطبيق ' + n + ' تغيير', function () { undos.reverse().forEach(function (u) { u(); }); M.save(); if (M.refreshBadges) M.refreshBadges(); M.toast('تم التراجع', 'info'); });
+    }
+    function doSend() {
+      var text = ta.value.trim(); if (!text || busy) return;
+      if (aiPending) resolvePending('skipped');
+      aiHistory.push({ role: 'user', content: text });
+      ta.value = ''; ta.style.height = 'auto'; renderMsgs();
+      busy = true; send.disabled = true; typing(true);
+      M.ai.chat(aiHistory).then(function (resp) {
+        typing(false); busy = false; send.disabled = false;
+        var msg = (resp.choices && resp.choices[0] && resp.choices[0].message) || {};
+        var parsed = M.ai.parseReply(msg);
+        aiHistory.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
+        if (parsed.actions.length) {
+          aiPending = { items: parsed.actions.map(function (a) { var v = M.ai.validate(a); return { name: a.name, arguments: a.arguments, id: a.id, ok: v.ok, clean: v.clean, error: v.error }; }) };
+        }
+        renderMsgs();
+      }).catch(function (e) {
+        typing(false); busy = false; send.disabled = false;
+        var msg = (e && e.message === 'no-key') ? 'لا يوجد مفتاح.' : ('تعذّر الاتصال بالنموذج: ' + ((e && e.message) || 'خطأ'));
+        aiHistory.push({ role: 'assistant', content: '⚠️ ' + msg });
+        renderMsgs();
+      });
+    }
+    send.onclick = doSend;
+    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+    ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
+    renderMsgs();
+    setTimeout(function () { try { ta.focus(); } catch (e) {} }, 0);
   };
 
   /* ---------- nav ---------- */
