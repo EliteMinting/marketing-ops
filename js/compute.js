@@ -52,6 +52,27 @@ window.MOA = window.MOA || {};
     return {open:open, content:content, effort:effort};
   };
 
+  /* month-over-month deltas vs the most recent PRIOR monthly snapshot (honest: null if none) */
+  M.kpiDeltas = function(){
+    var hist = (S().settings && S().settings.history) || {};
+    var cur = M.todayISO().slice(0,7);
+    var months = Object.keys(hist).filter(function(m){ return m < cur; }).sort();
+    if(!months.length) return null;
+    var prev = hist[months[months.length-1]];
+    var k = M.kpis();
+    function d(now, was){ if(was==null) return null; return now - was; }
+    return {
+      total:       d(k.total, prev.total),
+      done:        d(k.done, prev.done),
+      prog:        d(k.prog, prev.prog),
+      pub:         d(k.pub, prev.pub),
+      cTotal:      d(k.cTotal, prev.cTotal),
+      completion:  d(Math.round(k.completion*100), prev.completion),
+      rate:        d(Math.round(k.rate*100), prev.rate),
+      late:        d(k.late, prev.late)
+    };
+  };
+
   /* goals: progress toward target KPIs (targets live in settings, never derived) */
   M.goals = function(){
     var k=M.kpis(), t=(S().settings && S().settings.targets) || {};

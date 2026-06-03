@@ -53,7 +53,11 @@ window.MOA = window.MOA || {};
       {member:'نورة', role:'محرّرة فيديو',    area:'التصوير والمونتاج والموشن'}
     ],
     lists: JSON.parse(JSON.stringify(M.LISTS)),
-    settings: { period:'يونيو 2026', updatedAt:'2026-06-02', targets:{ published:10, completion:80, content:12 } }
+    settings: {
+      period:'يونيو 2026', updatedAt:'2026-06-02',
+      targets:{ published:10, completion:80, content:12 },
+      history:{ '2026-05': { total:4, done:1, prog:1, late:1, cTotal:2, pub:0, completion:25, rate:0 } }
+    }
   };
 
 })(window.MOA);

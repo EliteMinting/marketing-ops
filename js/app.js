@@ -41,18 +41,18 @@
     if (wasDark) { root.setAttribute('data-theme', 'dark'); if (M.currentView) M.showView(M.currentView); }
   };
 
-  /* header sync */
+  /* header sync (period chip/updated were moved out of the topbar; settings still holds them) */
   function updateHeader() {
-    var s = M.state.settings || {};
-    $('updatedAt').textContent = 'آخر تحديث: ' + (s.updatedAt || '—');
-    $('periodChip').textContent = s.period || '—';
+    var s = (M.state && M.state.settings) || {};
+    var pc = $('periodChip'); if (pc) pc.textContent = s.period || '—';
+    var up = $('updatedAt'); if (up) up.textContent = 'آخر تحديث: ' + (s.updatedAt || '—');
   }
 
-  /* task alert badge on the «المهام» nav items (sidebar + bottom bar) */
+  /* task alert badge on the «المهام» nav items (sidebar + bottom bar + topbar bell) */
   M.refreshBadges = function () {
     if (!M.state) return;
     var a = M.taskAlerts();
-    [['tasksBadge', 'nav-badge'], ['tasksBadgeBn', 'bn-badge']].forEach(function (p) {
+    [['tasksBadge', 'nav-badge'], ['tasksBadgeBn', 'bn-badge'], ['alertsBadge', 'dot-badge']].forEach(function (p) {
       var b = $(p[0]); if (!b) return;
       if (a.overdue > 0) { b.textContent = a.overdue; b.hidden = false; b.className = p[1] + ' badge-late'; b.title = a.overdue + ' مهمة متأخرة'; }
       else if (a.dueSoon > 0) { b.textContent = a.dueSoon; b.hidden = false; b.className = p[1] + ' badge-soon'; b.title = a.dueSoon + ' مهمة تستحق قريباً'; }
@@ -137,6 +137,9 @@
         }, 200);
       });
     }
+    // topbar bell -> tasks ; AI CTA -> assistant
+    var bell = $('btnAlerts'); if (bell) bell.addEventListener('click', function () { M.showView('tasks'); });
+    var cta = $('ctaAssistant'); if (cta) cta.addEventListener('click', function () { M.showView('assistant'); });
     // theme toggle
     $('themeToggle').addEventListener('click', M.toggleTheme);
     // print / PDF
