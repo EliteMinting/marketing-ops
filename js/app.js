@@ -48,14 +48,16 @@
     $('periodChip').textContent = s.period || '—';
   }
 
-  /* task alert badge on the «المهام» nav item */
+  /* task alert badge on the «المهام» nav items (sidebar + bottom bar) */
   M.refreshBadges = function () {
-    var b = $('tasksBadge');
-    if (!b || !M.state) return;
+    if (!M.state) return;
     var a = M.taskAlerts();
-    if (a.overdue > 0) { b.textContent = a.overdue; b.hidden = false; b.className = 'nav-badge badge-late'; b.title = a.overdue + ' مهمة متأخرة'; }
-    else if (a.dueSoon > 0) { b.textContent = a.dueSoon; b.hidden = false; b.className = 'nav-badge badge-soon'; b.title = a.dueSoon + ' مهمة تستحق قريباً'; }
-    else { b.hidden = true; b.textContent = ''; }
+    [['tasksBadge', 'nav-badge'], ['tasksBadgeBn', 'bn-badge']].forEach(function (p) {
+      var b = $(p[0]); if (!b) return;
+      if (a.overdue > 0) { b.textContent = a.overdue; b.hidden = false; b.className = p[1] + ' badge-late'; b.title = a.overdue + ' مهمة متأخرة'; }
+      else if (a.dueSoon > 0) { b.textContent = a.dueSoon; b.hidden = false; b.className = p[1] + ' badge-soon'; b.title = a.dueSoon + ' مهمة تستحق قريباً'; }
+      else { b.hidden = true; b.textContent = ''; }
+    });
   };
 
   M.onSaved = function () { updateHeader(); M.refreshBadges(); };
@@ -111,11 +113,17 @@
     M.refreshBadges();
     M.showView('dashboard');
 
-    // nav
-    var items = document.querySelectorAll('.nav-item');
-    for (var i = 0; i < items.length; i++) {
-      items[i].addEventListener('click', function () { M.showView(this.getAttribute('data-view')); });
+    // nav — covers the desktop sidebar, the mobile bottom bar, and the «المزيد» sheet
+    var navItems = document.querySelectorAll('[data-view]');
+    for (var i = 0; i < navItems.length; i++) {
+      navItems[i].addEventListener('click', function () { closeSheet(); M.showView(this.getAttribute('data-view')); });
     }
+    // «المزيد» bottom sheet
+    function openSheet() { $('moreSheet').classList.add('open'); $('sheetScrim').classList.add('show'); }
+    function closeSheet() { var s = $('moreSheet'); if (s) s.classList.remove('open'); var sc = $('sheetScrim'); if (sc) sc.classList.remove('show'); }
+    M.closeSheet = closeSheet;
+    var bnMore = $('bnMore'); if (bnMore) bnMore.addEventListener('click', openSheet);
+    var sheetScrim = $('sheetScrim'); if (sheetScrim) sheetScrim.addEventListener('click', closeSheet);
     // global search
     var gs = $('globalSearch');
     if (gs) {
@@ -129,13 +137,6 @@
         }, 200);
       });
     }
-    // mobile nav
-    $('navToggle').addEventListener('click', function () {
-      $('sidenav').classList.toggle('open'); $('scrim').classList.toggle('show');
-    });
-    $('scrim').addEventListener('click', function () {
-      $('sidenav').classList.remove('open'); $('scrim').classList.remove('show');
-    });
     // theme toggle
     $('themeToggle').addEventListener('click', M.toggleTheme);
     // print / PDF
