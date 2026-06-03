@@ -375,3 +375,49 @@ table.data tbody tr:hover .row-del{opacity:1}
   .cal-event{font-size:9.5px;padding:3px 5px}
   .filter-input{min-width:0;flex:1 1 100%;max-width:none}
 }
+
+/* ===== print / PDF ===== */
+.print-only{display:none}
+@media print{
+  /* force a light, ink-friendly palette even if dark mode is on */
+  :root,:root[data-theme="dark"]{
+    --bg:#fff; --surface:#fff; --surface-2:#F4F3FB; --surface-3:#EEEDF8;
+    --ink:#211E50; --text:#2E2A72; --muted:#5b577a; --faint:#8a86a6;
+    --border:#D9D6EC; --border-strong:#C9C5E2; --divider:#E7E5F4;
+    --topbar-bg:#fff;
+  }
+  @page{margin:14mm}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{background:#fff;font-size:12px}
+  /* hide app chrome and interactive controls */
+  .topbar,.sidenav,.scrim,.toast-wrap,.nav-toggle,.filter-bar,
+  .col-actions,.row-del,.kb-add,.cal-nav,.modal{display:none!important}
+  .table-card>div:last-child{display:none} /* "add row" footer */
+  /* flow content naturally without the grid */
+  .app{display:block;min-height:0}
+  .content{grid-area:auto;padding:0;overflow:visible}
+  .wrap{max-width:none}
+  .view-head{margin-bottom:10px}
+  .card,.table-card{box-shadow:none;border-color:var(--border-strong);break-inside:avoid}
+  /* print report header */
+  .print-only{display:block}
+  .print-header{margin:0 0 14px;padding-bottom:10px;border-bottom:2px solid var(--ink)}
+  .print-header .ph-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .print-header .ph-brand{font-size:16px;font-weight:800;color:var(--ink)}
+  .print-header .ph-meta{font-size:11px;color:var(--muted)}
+  .print-header .ph-title{margin-top:6px;font-size:20px;font-weight:800;color:var(--ink)}
+  /* tables: show everything, keep rows intact */
+  .table-scroll{overflow:visible;max-height:none}
+  table.data{min-width:0;font-size:11.5px}
+  table.data thead th{position:static}
+  table.data tbody tr{break-inside:avoid}
+  /* render editable cells as plain printed text */
+  .cell-input,.cell-select{border:none!important;background:transparent!important;box-shadow:none!important;padding:4px 6px}
+  .pill-select{appearance:none;background-image:none;padding:3px 10px}
+  /* charts and kanban fit the page */
+  .chart-svg{max-width:520px}
+  .kanban{overflow:visible;flex-wrap:wrap}
+  .kb-col{flex:1 1 30%;break-inside:avoid;background:var(--surface-2)}
+  .kb-card{break-inside:avoid}
+  .cal-cell{min-height:78px}
+}
