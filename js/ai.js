@@ -10,7 +10,9 @@ window.MOA = window.MOA || {};
   /* ---------- config (kept OUT of M.state so the key never lands in exported JSON) ---------- */
   var KEY_K = 'moa.ai.key', CFG_K = 'moa.ai';
   M.ai.MODELS = [
-    { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3' },
+    { id: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B (سريع)' },
+    { id: 'mistralai/mistral-7b-instruct', label: 'Mistral 7B (سريع)' },
+    { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3 (أقوى)' },
     { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
     { id: 'qwen/qwen-2.5-72b-instruct', label: 'Qwen2.5 72B' }
   ];
@@ -75,11 +77,12 @@ window.MOA = window.MOA || {};
   function snapshot() {
     var k = M.kpis(), a = M.taskAlerts(), L = lists();
     function brief(arr, f) { return arr.slice(0, 40).map(f).join('\n'); }
-    var tasks = brief(S().tasks.filter(function (t) { return has(t.task); }), function (t) {
+    function brief2(arr, f) { return arr.slice(0, 25).map(f).join('\n'); }
+    var tasks = brief2(S().tasks.filter(function (t) { return has(t.task); }), function (t) {
       return '- ' + t.id + ': ' + t.task + ' | المسؤول:' + (t.owner || '—') + ' | الأولوية:' + (t.priority || '—') +
         ' | البدء:' + (t.start || '—') + ' | التسليم:' + (t.due || '—') + ' | الحالة:' + (t.status || '—');
     });
-    var content = brief(S().content.filter(function (c) { return has(c.title); }), function (c) {
+    var content = brief2(S().content.filter(function (c) { return has(c.title); }), function (c) {
       return '- ' + c.id + ': ' + c.title + ' | المنصة:' + (c.platform || '—') + ' | المسؤول:' + (c.owner || '—') + ' | الحالة:' + (c.status || '—');
     });
     return [
@@ -110,27 +113,86 @@ window.MOA = window.MOA || {};
   }
 
   /* ---------- OpenRouter client ---------- */
-  M.ai.chat = function (messages) {
-    var key = M.ai.getKey();
-    if (!key) return Promise.reject(new Error('no-key'));
+  var ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+  function buildBody(messages, stream) {
     var cfg = M.ai.getConfig();
-    var body = {
+    var b = {
       model: cfg.model,
       messages: [{ role: 'system', content: systemPrompt() }].concat(messages),
       tools: M.ai.tools(),
       tool_choice: 'auto',
-      temperature: 0.3
+      temperature: 0.3,
+      max_tokens: 800,
+      provider: { sort: 'throughput' } // route to the fastest available provider
     };
-    var headers = { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' };
-    try { headers['HTTP-Referer'] = location.origin; headers['X-Title'] = 'Marketing Ops'; } catch (e) {}
-    return fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST', headers: headers, body: JSON.stringify(body)
-    }).then(function (r) {
-      return r.json().then(function (j) {
-        if (!r.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status));
-        return j;
+    if (stream) b.stream = true;
+    return b;
+  }
+  function headers(key) {
+    var h = { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' };
+    try { h['HTTP-Referer'] = location.origin; h['X-Title'] = 'Marketing Ops'; } catch (e) {}
+    return h;
+  }
+
+  M.ai.chat = function (messages) {
+    var key = M.ai.getKey();
+    if (!key) return Promise.reject(new Error('no-key'));
+    return fetch(ENDPOINT, { method: 'POST', headers: headers(key), body: JSON.stringify(buildBody(messages, false)) })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status));
+          return j;
+        });
       });
-    });
+  };
+
+  /* streaming variant — h = {onText(delta), onDone({content, tool_calls}), onError(err)} */
+  M.ai.chatStream = function (messages, h) {
+    var key = M.ai.getKey();
+    if (!key) { h.onError(new Error('no-key')); return; }
+    fetch(ENDPOINT, { method: 'POST', headers: headers(key), body: JSON.stringify(buildBody(messages, true)) })
+      .then(function (resp) {
+        if (!resp.ok || !resp.body || !resp.body.getReader) {
+          return resp.json().catch(function () { return {}; }).then(function (j) {
+            throw new Error((j && j.error && j.error.message) || ('HTTP ' + resp.status));
+          });
+        }
+        var reader = resp.body.getReader(), dec = new TextDecoder(), buf = '';
+        var content = '', toolMap = {}, finalized = false;
+        function finalize() {
+          if (finalized) return; finalized = true;
+          var tcs = Object.keys(toolMap).map(function (k) {
+            var s = toolMap[k]; return { id: s.id, type: 'function', function: { name: s.name, arguments: s.args } };
+          });
+          h.onDone({ content: content, tool_calls: tcs.length ? tcs : undefined });
+        }
+        function handle(data) {
+          if (data === '[DONE]') { finalize(); return; }
+          var j; try { j = JSON.parse(data); } catch (e) { return; }
+          var d = j.choices && j.choices[0] && j.choices[0].delta;
+          if (!d) return;
+          if (d.content) { content += d.content; if (h.onText) h.onText(d.content); }
+          if (d.tool_calls) d.tool_calls.forEach(function (tc) {
+            var i = tc.index || 0, s = toolMap[i] || (toolMap[i] = { id: '', name: '', args: '' });
+            if (tc.id) s.id = tc.id;
+            if (tc.function) { if (tc.function.name) s.name = tc.function.name; if (tc.function.arguments) s.args += tc.function.arguments; }
+          });
+        }
+        function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) { finalize(); return; }
+            buf += dec.decode(res.value, { stream: true });
+            var parts = buf.split('\n'); buf = parts.pop();
+            parts.forEach(function (line) {
+              line = line.trim();
+              if (line.indexOf('data:') === 0) handle(line.slice(5).trim());
+            });
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .catch(function (e) { if (h.onError) h.onError(e); });
   };
 
   /* ---------- parse a model reply into {text, actions[]} ---------- */
