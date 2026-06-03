@@ -154,6 +154,7 @@ window.MOA = window.MOA || {};
       { key: 'domain', label: 'المجال', type: 'select', source: function () { return S().lists.domains; } },
       { key: 'owner', label: 'المسؤول', type: 'select', source: members },
       { key: 'priority', label: 'الأولوية', pill: true, source: function () { return S().lists.priorities; } },
+      { key: 'start', label: 'تاريخ البدء', type: 'date' },
       { key: 'due', label: 'تاريخ التسليم', type: 'date' },
       { key: 'status', label: 'الحالة', pill: true, source: function () { return S().lists.taskStatuses; } },
       { key: 'effort', label: 'الجهد (ساعات)', type: 'number' },
@@ -163,7 +164,7 @@ window.MOA = window.MOA || {};
     var opts = {
       rowClass: function (r) { return M.isOverdue(r) ? 'is-late' : ''; },
       onChange: function (row, key) { save(); if (key === 'due' || key === 'status') M.showView('tasks'); },
-      onAdd: function () { S().tasks.push({ id: M.nextId(S().tasks, 'T'), task: '', contentId: '', domain: '', owner: '', priority: 'متوسطة', due: '', status: 'لم تبدأ', effort: '', notes: '' }); save(); M.showView('tasks'); },
+      onAdd: function () { S().tasks.push({ id: M.nextId(S().tasks, 'T'), task: '', contentId: '', domain: '', owner: '', priority: 'متوسطة', start: '', due: '', status: 'لم تبدأ', effort: '', notes: '' }); save(); M.showView('tasks'); },
       onDelete: function (row) { var a = S().tasks; a.splice(a.indexOf(row), 1); save(); M.showView('tasks'); M.toast('تم حذف المهمة', 'info'); },
       addLabel: 'إضافة مهمة'
     };
@@ -393,7 +394,7 @@ window.MOA = window.MOA || {};
 
       var add = el('button', 'kb-add'); add.innerHTML = '＋ مهمة';
       add.onclick = function () {
-        S().tasks.push({ id: M.nextId(S().tasks, 'T'), task: '', contentId: '', domain: '', owner: '', priority: 'متوسطة', due: '', status: st, effort: '', notes: '' });
+        S().tasks.push({ id: M.nextId(S().tasks, 'T'), task: '', contentId: '', domain: '', owner: '', priority: 'متوسطة', start: '', due: '', status: st, effort: '', notes: '' });
         save(); M.showView('tasks');
       };
       col.appendChild(add);
@@ -410,6 +411,96 @@ window.MOA = window.MOA || {};
       board.appendChild(col);
     });
     c.appendChild(board);
+  };
+
+  /* ---------- Gantt timeline (tasks) ---------- */
+  function dnum(iso) {
+    if (!iso) return NaN;
+    var p = String(iso).split('-');
+    if (p.length !== 3) return NaN;
+    var t = Date.UTC(+p[0], +p[1] - 1, +p[2]);
+    return isNaN(t) ? NaN : Math.floor(t / 86400000);
+  }
+  function fmtDay(num) {
+    var d = new Date(num * 86400000);
+    return pad2(d.getUTCMonth() + 1) + '/' + pad2(d.getUTCDate());
+  }
+
+  M.views.gantt = function (c) {
+    c.appendChild(head('المخطط الزمني', 'المهام كأشرطة على محور زمني (من تاريخ البدء إلى التسليم) — المتأخّرة بالأحمر، والخط العمودي هو اليوم'));
+    var wrap = el('div', 'wrap');
+
+    // collect plottable tasks (have text + at least one valid date)
+    var items = [];
+    S().tasks.forEach(function (t) {
+      if (!(t.task || '').trim()) return;
+      var ds = dnum(t.start), dd = dnum(t.due);
+      if (isNaN(ds) && isNaN(dd)) return;
+      var s = isNaN(ds) ? dd : ds, e = isNaN(dd) ? ds : dd;
+      if (s > e) { var tmp = s; s = e; e = tmp; }
+      items.push({ t: t, s: s, e: e });
+    });
+
+    if (!items.length) {
+      var em = el('div', 'empty'); em.textContent = 'أضِف تواريخ بدء/تسليم للمهام لعرض المخطط الزمني.';
+      wrap.appendChild(em); c.appendChild(wrap); return;
+    }
+
+    items.sort(function (a, b) { return a.s - b.s || a.e - b.e; });
+    var minD = items[0].s, maxD = items[0].e;
+    items.forEach(function (it) { if (it.s < minD) minD = it.s; if (it.e > maxD) maxD = it.e; });
+    minD -= 1; maxD += 1;                 // padding
+    var span = Math.max(1, maxD - minD);
+    var pct = function (d) { return ((d - minD) / span) * 100; };
+
+    // date scale ticks (~6, aligned gridlines reuse the same fractions)
+    var TICKS = 6, ticks = [];
+    for (var i = 0; i <= TICKS; i++) { var f = i / TICKS; ticks.push({ f: f, label: fmtDay(Math.round(minD + f * span)) }); }
+    function gridHTML() {
+      return ticks.map(function (tk) { return '<span class="gantt-grid" style="left:' + (tk.f * 100) + '%"></span>'; }).join('');
+    }
+
+    var today = dnum(M.todayISO());
+    var todayLine = (today >= minD && today <= maxD)
+      ? '<span class="gantt-today" style="left:' + pct(today) + '%" title="اليوم"></span>' : '';
+
+    var board = el('div', 'gantt');
+
+    // header: scale
+    var hd = el('div', 'gantt-row gantt-head');
+    hd.innerHTML = '<div class="gantt-label gantt-scale-label">المهمة</div>' +
+      '<div class="gantt-track gantt-scale">' + gridHTML() +
+      ticks.map(function (tk) { return '<span class="gantt-tick" style="left:' + (tk.f * 100) + '%">' + tk.label + '</span>'; }).join('') +
+      '</div>';
+    board.appendChild(hd);
+
+    // rows
+    items.forEach(function (it) {
+      var t = it.t, late = M.isOverdue(t);
+      var row = el('div', 'gantt-row');
+      var label = el('div', 'gantt-label');
+      label.innerHTML = '<span class="gantt-task">' + esc(t.task) + '</span>' +
+        '<span class="gantt-sub">' + (t.owner ? esc(t.owner) + ' · ' : '') + fmtDay(it.s) + ' → ' + fmtDay(it.e) + '</span>';
+      var track = el('div', 'gantt-track');
+      var left = pct(it.s), width = Math.max(((it.e - it.s + 1) / span) * 100, 1.5);
+      var bar = '<span class="gantt-bar p-' + M.colorKey(t.status) + (late ? ' is-late' : '') + '"' +
+        ' style="left:' + left + '%;width:' + width + '%"' +
+        ' title="' + esc(t.task) + ' · ' + esc(t.status || '') + '"></span>';
+      track.innerHTML = gridHTML() + todayLine + bar;
+      row.appendChild(label); row.appendChild(track);
+      board.appendChild(row);
+    });
+    var scroll = el('div', 'gantt-scroll'); scroll.appendChild(board);
+    wrap.appendChild(scroll);
+
+    // status legend
+    var legend = [['مكتملة/منشور', 'done'], ['قيد التنفيذ', 'progress'], ['قيد المراجعة', 'review'],
+    ['معتمدة', 'approved'], ['لم تبدأ', 'idle'], ['معلّقة', 'hold'], ['متأخرة', 'late']];
+    var leg = el('div', 'gantt-legend');
+    leg.innerHTML = legend.map(function (l) { return '<span class="gl"><i style="background:var(--' + l[1] + ')"></i>' + l[0] + '</span>'; }).join('');
+    wrap.appendChild(leg);
+
+    c.appendChild(wrap);
   };
 
   /* ---------- nav ---------- */
