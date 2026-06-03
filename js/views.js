@@ -697,21 +697,31 @@ window.MOA = window.MOA || {};
       if (aiPending) resolvePending('skipped');
       aiHistory.push({ role: 'user', content: text });
       ta.value = ''; ta.style.height = 'auto'; renderMsgs();
-      busy = true; send.disabled = true; typing(true);
-      M.ai.chat(aiHistory).then(function (resp) {
-        typing(false); busy = false; send.disabled = false;
-        var msg = (resp.choices && resp.choices[0] && resp.choices[0].message) || {};
-        var parsed = M.ai.parseReply(msg);
-        aiHistory.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
-        if (parsed.actions.length) {
-          aiPending = { items: parsed.actions.map(function (a) { var v = M.ai.validate(a); return { name: a.name, arguments: a.arguments, id: a.id, ok: v.ok, clean: v.clean, error: v.error }; }) };
+      busy = true; send.disabled = true;
+      // live streaming bubble: typing dots until first token, then text streams in
+      var live = el('div', 'msg ai typing'); live.innerHTML = '<span></span><span></span><span></span>';
+      msgs.appendChild(live); msgs.scrollTop = msgs.scrollHeight;
+      var acc = '', started = false;
+      M.ai.chatStream(aiHistory, {
+        onText: function (delta) {
+          if (!started) { started = true; live.classList.remove('typing'); live.textContent = ''; }
+          acc += delta; live.textContent = acc; msgs.scrollTop = msgs.scrollHeight;
+        },
+        onDone: function (msg) {
+          busy = false; send.disabled = false;
+          var parsed = M.ai.parseReply(msg);
+          aiHistory.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
+          if (parsed.actions.length) {
+            aiPending = { items: parsed.actions.map(function (a) { var v = M.ai.validate(a); return { name: a.name, arguments: a.arguments, id: a.id, ok: v.ok, clean: v.clean, error: v.error }; }) };
+          }
+          renderMsgs(); // replaces the live bubble with the final history render
+        },
+        onError: function (e) {
+          busy = false; send.disabled = false; if (live.parentNode) live.remove();
+          var m = (e && e.message === 'no-key') ? 'لا يوجد مفتاح.' : ('تعذّر الاتصال بالنموذج: ' + ((e && e.message) || 'خطأ'));
+          aiHistory.push({ role: 'assistant', content: '⚠️ ' + m });
+          renderMsgs();
         }
-        renderMsgs();
-      }).catch(function (e) {
-        typing(false); busy = false; send.disabled = false;
-        var msg = (e && e.message === 'no-key') ? 'لا يوجد مفتاح.' : ('تعذّر الاتصال بالنموذج: ' + ((e && e.message) || 'خطأ'));
-        aiHistory.push({ role: 'assistant', content: '⚠️ ' + msg });
-        renderMsgs();
       });
     }
     send.onclick = doSend;
