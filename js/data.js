@@ -40,11 +40,11 @@ window.MOA = window.MOA || {};
       {id:'C-003', date:'2026-06-15', week:'الأسبوع 2', platform:'يوتيوب',   type:'فيديو', title:'شرح المنتج بالتفصيل',     owner:'نورة', status:'فكرة',      assetUrl:'', publishedDate:'',           notes:'مثال', example:true}
     ],
     tasks: [
-      {id:'T-001', task:'تصميم غلاف الحملة',        contentId:'C-001', domain:'تصميم', owner:'خالد', priority:'عالية',  due:'2026-06-05', status:'مكتملة',     effort:4, notes:'', example:true},
-      {id:'T-002', task:'كتابة سيناريو الريل',       contentId:'C-001', domain:'محتوى', owner:'سارة', priority:'عالية',  due:'2026-06-06', status:'مكتملة',     effort:3, notes:'', example:true},
-      {id:'T-003', task:'مونتاج فيديو الكواليس',     contentId:'C-002', domain:'إنتاج', owner:'نورة', priority:'متوسطة', due:'2026-06-09', status:'قيد التنفيذ', effort:5, notes:'', example:true},
-      {id:'T-004', task:'إعداد سكربت الشرح',         contentId:'C-003', domain:'محتوى', owner:'سارة', priority:'متوسطة', due:'2026-05-30', status:'قيد التنفيذ', effort:4, notes:'مثال على مهمة متأخرة', example:true},
-      {id:'T-005', task:'تجهيز خطة النشر الشهرية',   contentId:'',      domain:'تنسيق', owner:'ريم',  priority:'منخفضة', due:'2026-06-20', status:'لم تبدأ',     effort:2, notes:'', example:true}
+      {id:'T-001', task:'تصميم غلاف الحملة',        contentId:'C-001', domain:'تصميم', owner:'خالد', priority:'عالية',  start:'2026-06-02', due:'2026-06-05', status:'مكتملة',     effort:4, notes:'', example:true},
+      {id:'T-002', task:'كتابة سيناريو الريل',       contentId:'C-001', domain:'محتوى', owner:'سارة', priority:'عالية',  start:'2026-06-03', due:'2026-06-06', status:'مكتملة',     effort:3, notes:'', example:true},
+      {id:'T-003', task:'مونتاج فيديو الكواليس',     contentId:'C-002', domain:'إنتاج', owner:'نورة', priority:'متوسطة', start:'2026-06-05', due:'2026-06-09', status:'قيد التنفيذ', effort:5, notes:'', example:true},
+      {id:'T-004', task:'إعداد سكربت الشرح',         contentId:'C-003', domain:'محتوى', owner:'سارة', priority:'متوسطة', start:'2026-05-27', due:'2026-05-30', status:'قيد التنفيذ', effort:4, notes:'مثال على مهمة متأخرة', example:true},
+      {id:'T-005', task:'تجهيز خطة النشر الشهرية',   contentId:'',      domain:'تنسيق', owner:'ريم',  priority:'منخفضة', start:'2026-06-16', due:'2026-06-20', status:'لم تبدأ',     effort:2, notes:'', example:true}
     ],
     team: [
       {member:'ريم',  role:'مديرة التسويق',  area:'الإشراف العام والخطة الشهرية'},

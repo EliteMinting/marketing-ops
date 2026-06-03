@@ -3,6 +3,44 @@
   "use strict";
   function $(id) { return document.getElementById(id); }
 
+  /* theme (stored separately from user data) */
+  var THEME_KEY = 'moa.theme';
+  function currentTheme() { try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { return 'light'; } }
+  function applyTheme(t) {
+    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  applyTheme(currentTheme()); // apply as early as the script runs to limit flash
+  M.toggleTheme = function () {
+    var next = currentTheme() === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    applyTheme(next);
+    if (M.currentView) M.showView(M.currentView); // re-render so charts pick up themed neutrals
+  };
+
+  /* print / PDF — prints the current view as a clean report via the browser */
+  M.printReport = function () {
+    var root = document.documentElement;
+    var wasDark = root.getAttribute('data-theme') === 'dark';
+    // charts bake their colors in at render time, so re-render in light for print
+    if (wasDark) { root.removeAttribute('data-theme'); if (M.currentView) M.showView(M.currentView); }
+
+    var s = (M.state && M.state.settings) || {};
+    var active = document.querySelector('.nav-item.is-active span:last-child');
+    var viewName = active ? active.textContent : '';
+    var ph = $('printHeader');
+    if (ph) {
+      ph.innerHTML =
+        '<div class="ph-top"><div class="ph-brand">نظام تنظيم قسم التسويق</div>' +
+        '<div class="ph-meta">الفترة: <b>' + (s.period || '—') + '</b> · تاريخ التقرير: <b>' + (s.updatedAt || '') + '</b></div></div>' +
+        '<div class="ph-title">' + viewName + '</div>';
+    }
+
+    // window.print() blocks until the print dialog is dismissed, so restore right after
+    window.print();
+    if (wasDark) { root.setAttribute('data-theme', 'dark'); if (M.currentView) M.showView(M.currentView); }
+  };
+
   /* header sync */
   function updateHeader() {
     var s = M.state.settings || {};
@@ -59,6 +97,10 @@
     $('scrim').addEventListener('click', function () {
       $('sidenav').classList.remove('open'); $('scrim').classList.remove('show');
     });
+    // theme toggle
+    $('themeToggle').addEventListener('click', M.toggleTheme);
+    // print / PDF
+    $('btnPdf').addEventListener('click', M.printReport);
     // export / import
     $('btnExport').addEventListener('click', function () { M.exportJSON(); M.toast('تم تصدير البيانات', 'ok'); });
     $('btnImport').addEventListener('click', function () { $('importFile').click(); });
