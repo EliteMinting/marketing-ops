@@ -55,6 +55,10 @@ window.MOA = window.MOA || {};
     return inp;
   }
   /* CSV export button: exports the currently shown rows using the schema labels */
+  function addButton(onAdd, label) {
+    var b = el('button', 'btn btn-primary btn-sm'); b.innerHTML = '＋ ' + label;
+    b.onclick = onAdd; return b;
+  }
   function csvButton(getRows, schema, filename) {
     var b = el('button', 'btn btn-ghost btn-sm'); b.textContent = 'CSV'; b.title = 'تصدير CSV (إكسل)';
     b.onclick = function () {
@@ -112,9 +116,10 @@ window.MOA = window.MOA || {};
     var trend = M.weeklyTrend();
     var maxW = Math.max.apply(null, trend.map(function (d) { return d.weekly; }).concat([0]));
     var vbarsData = trend.map(function (d) { return { label: d.week.replace('الأسبوع ', 'أ'), value: d.weekly, highlight: maxW > 0 && d.weekly === maxW }; });
-    var work = M.workload();
     var status = M.statusDistribution();
-    var emptyMini = '<div class="empty" style="padding:24px">أضِف أعضاء الفريق لعرض هذا الرسم.</div>';
+    var capData = S().team.filter(function (m) { return (m.member || '').trim(); }).map(function (m) {
+      var tc = M.teamComputed(m.member); return { name: m.member, open: tc.open, content: tc.content, effort: tc.effort };
+    });
 
     // "this week" strip — open tasks due per day, today highlighted
     function weekstrip() {
@@ -147,13 +152,14 @@ window.MOA = window.MOA || {};
       '<div class="card col-8"><div class="card-title">المحتوى عبر الأسابيع <span class="ct-sub">عدد العناصر أسبوعياً</span></div>' + M.vbars(vbarsData) + '</div>' +
       '<div class="card col-4"><div class="card-title">نسبة الإنجاز</div><div class="donut-wrap">' + M.donut(k.completion, M.HEX.approved) + '<div class="donut-cap">' + k.done + ' من ' + k.total + ' مهمة</div></div></div>' +
       '<div class="card col-12"><div class="card-title">هذا الأسبوع <span class="ct-sub">المهام المستحقة لكل يوم</span></div>' + weekstrip() + '</div>' +
-      '<div class="card col-6"><div class="card-title">عبء العمل لكل عضو <span class="ct-sub">مهام مفتوحة</span></div>' + (work.length ? M.hbars(work, 'progress') : emptyMini) + '</div>' +
-      '<div class="card col-6"><div class="card-title">توزيع حالات المهام</div>' + M.statusBars(status) + '</div>' +
+      '<div class="card col-6"><div class="card-title">سعة الفريق <span class="ct-sub">العبء لكل عضو</span></div>' + M.capacityCards(capData) + '</div>' +
+      '<div class="card col-6"><div class="card-title">توزيع حالات المهام</div>' + M.statusStack(status) + '</div>' +
       '</div>' +
       '<div class="section-title">الأهداف والمؤشرات المستهدفة <span class="ct-sub">حرّر القيم من الإعدادات</span></div>' +
       '<div class="goals-grid">' + goalCards + '</div>';
     c.appendChild(head('لوحة التحكم', 'نظرة عامة لحظية على أداء الفريق — تتحدّث تلقائياً مع كل تعديل'));
     c.appendChild(wrap);
+    if (M.animateCounts) M.animateCounts(wrap);
   };
 
   /* ---------- Content ---------- */
@@ -202,6 +208,7 @@ window.MOA = window.MOA || {};
     bar.appendChild(filterSelect(contentFilter.week, S().lists.weeks, 'كل الأسابيع', function (v) { contentFilter.week = v; renderTable(); }));
     bar.appendChild(clr);
     bar.appendChild(csvButton(function () { return filterContent(S().content); }, schema, 'المحتوى'));
+    bar.appendChild(addButton(opts.onAdd, 'إضافة محتوى'));
     c.appendChild(bar);
     c.appendChild(host);
     renderTable();
@@ -254,6 +261,7 @@ window.MOA = window.MOA || {};
     bar.appendChild(filterSelect(taskFilter.priority, S().lists.priorities, 'كل الأولويات', function (v) { taskFilter.priority = v; renderTable(); }));
     bar.appendChild(clr);
     bar.appendChild(csvButton(function () { return filterTasks(S().tasks); }, schema, 'المهام'));
+    bar.appendChild(addButton(opts.onAdd, 'إضافة مهمة'));
     c.appendChild(bar);
     c.appendChild(host);
     renderTable();
