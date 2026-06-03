@@ -88,6 +88,13 @@ svg{display:block}
   padding:5px 12px;border-radius:var(--r-pill);
 }
 .updated{font-size:12px;color:var(--faint);font-weight:500}
+.global-search{
+  flex:1 1 200px;max-width:300px;min-width:0;
+  border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+  border-radius:var(--r-pill);padding:8px 14px;font-family:inherit;font-size:13px;
+}
+.global-search::placeholder{color:var(--faint)}
+.global-search:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}
 
 /* nav */
 .sidenav{
@@ -109,6 +116,12 @@ svg{display:block}
 }
 .nav-ico{width:22px;height:22px;color:inherit;flex:0 0 auto}
 .nav-ico svg{width:22px;height:22px;stroke-linecap:round;stroke-linejoin:round}
+.nav-badge{
+  margin-inline-start:auto;min-width:20px;height:20px;border-radius:var(--r-pill);
+  display:inline-grid;place-items:center;padding:0 6px;font-size:11px;font-weight:800;color:#fff;
+}
+.nav-badge.badge-late{background:var(--late-ink)}
+.nav-badge.badge-soon{background:var(--hold-ink)}
 .nav-foot{margin-top:auto;padding:var(--s4) var(--s3) var(--s2);font-size:11px;color:var(--faint)}
 
 /* content */
@@ -178,6 +191,19 @@ svg{display:block}
 .section-title{font-size:15px;font-weight:800;color:var(--ink);margin:var(--s5) 2px var(--s3);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .goals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s4);margin-bottom:var(--s5)}
 
+/* ===== global search results ===== */
+.search-results{display:flex;flex-direction:column;gap:6px}
+.search-item{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:start;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:9px 12px;font-family:inherit;transition:.12s;
+}
+.search-item:hover{border-color:var(--primary);background:var(--primary-50)}
+.search-item .si-id{font-weight:700;color:var(--primary-600);font-size:12px;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.search-item .si-title{font-weight:700;color:var(--ink);font-size:13px;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-item .si-meta{color:var(--muted);font-size:12px;flex:0 0 auto}
+.pill-tag{border-radius:var(--r-pill);padding:3px 10px;font-size:11.5px;font-weight:700;flex:0 0 auto}
+
 /* ===== table ===== */
 .table-tools{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4)}
 .table-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh-sm);overflow:hidden}
@@ -188,10 +214,14 @@ table.data thead th{
   font-weight:700;font-size:12.5px;text-align:start;padding:12px 12px;white-space:nowrap;
   border-bottom:1px solid var(--border-strong);
 }
+table.data thead th.sortable{cursor:pointer;user-select:none}
+table.data thead th.sortable:hover{color:var(--primary-600)}
+table.data thead th .sort-ind{color:var(--primary);font-size:10px}
 table.data tbody td{padding:5px 8px;border-bottom:1px solid var(--divider);vertical-align:middle}
 table.data tbody tr:nth-child(even){background:var(--surface-2)}
 table.data tbody tr:hover{background:var(--primary-50)}
 table.data tbody tr.is-late{box-shadow:inset 3px 0 0 var(--late)}
+table.data tbody tr.is-soon{box-shadow:inset 3px 0 0 var(--hold)}
 .cell-input,.cell-select{
   width:100%;border:1px solid transparent;background:transparent;border-radius:var(--r-sm);
   padding:7px 8px;font-family:inherit;font-size:13.5px;color:var(--text);transition:.12s
@@ -228,6 +258,7 @@ table.data tbody tr:hover .row-del{opacity:1}
 .p-hold{background-color:var(--hold);color:var(--hold-ink)}
 .p-late{background-color:var(--late);color:var(--late-ink)}
 .tag-late{background:var(--late);color:var(--late-ink);font-weight:700;font-size:11.5px;padding:3px 10px;border-radius:var(--r-pill)}
+.tag-soon{background:var(--hold);color:var(--hold-ink);font-weight:700;font-size:11.5px;padding:3px 10px;border-radius:var(--r-pill)}
 
 /* empty state */
 .empty{padding:var(--s8) var(--s4);text-align:center;color:var(--muted)}
@@ -256,6 +287,8 @@ table.data tbody tr:hover .row-del{opacity:1}
   animation:toastIn .25s ease; pointer-events:auto;
 }
 .toast i{width:9px;height:9px;border-radius:50%}
+.toast-action{background:none;border:none;color:var(--primary-600);font-weight:800;font-size:13px;padding:0 4px;margin-inline-start:4px}
+.toast-action:hover{text-decoration:underline}
 .toast.ok i{background:var(--done)} .toast.err i{background:var(--late)} .toast.info i{background:var(--progress)}
 @keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
@@ -331,6 +364,7 @@ table.data tbody tr:hover .row-del{opacity:1}
 .kb-card:hover{box-shadow:var(--sh-sm)}
 .kb-card.dragging{opacity:.5}
 .kb-card.is-late{box-shadow:inset 3px 0 0 var(--late)}
+.kb-card.is-soon{box-shadow:inset 3px 0 0 var(--hold)}
 .kb-task{font-size:13px;font-weight:700;color:var(--ink);line-height:1.45}
 .kb-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .kb-owner{font-size:11.5px;font-weight:600;color:var(--muted)}
@@ -390,6 +424,7 @@ table.data tbody tr:hover .row-del{opacity:1}
   .topbar-actions{gap:8px;flex:0 0 auto}
   /* declutter: import/export remain available in Settings → البيانات */
   #btnImport,#btnExport{display:none}
+  .global-search{display:none}
   .btn{padding:7px 10px;font-size:12px}
   .chip{display:none}
   /* tables -> cards */

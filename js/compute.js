@@ -9,6 +9,23 @@ window.MOA = window.MOA || {};
     return has(t.due) && t.due < M.todayISO() && t.status!=='مكتملة' && has(t.task);
   };
 
+  function addDaysISO(iso, n){
+    var d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n);
+    var z=function(x){return String(x).padStart(2,'0');};
+    return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
+  }
+  /* due within the next 3 days (inclusive), not done and not already overdue */
+  M.isDueSoon = function(t){
+    if(!has(t.due) || !has(t.task) || t.status==='مكتملة') return false;
+    if(M.isOverdue(t)) return false;
+    var today=M.todayISO();
+    return t.due>=today && t.due<=addDaysISO(today,3);
+  };
+  M.taskAlerts = function(){
+    var t=S().tasks;
+    return { overdue:t.filter(M.isOverdue).length, dueSoon:t.filter(M.isDueSoon).length };
+  };
+
   M.kpis = function(){
     var t=S().tasks, c=S().content;
     var total=t.filter(function(x){return has(x.task);}).length;
