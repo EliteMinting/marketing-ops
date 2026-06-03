@@ -48,6 +48,17 @@ window.MOA = window.MOA || {};
     inp.addEventListener('input', function () { clearTimeout(deb); deb = setTimeout(function () { onChange(inp.value); }, 250); });
     return inp;
   }
+  /* CSV export button: exports the currently shown rows using the schema labels */
+  function csvButton(getRows, schema, filename) {
+    var b = el('button', 'btn btn-ghost btn-sm'); b.textContent = 'CSV'; b.title = 'تصدير CSV (إكسل)';
+    b.onclick = function () {
+      var cols = schema.filter(function (c) { return c.type !== 'computed'; })
+        .map(function (c) { return { key: c.key, label: c.label }; });
+      M.exportCSV(getRows(), cols, filename);
+      M.toast('تم تصدير CSV', 'ok');
+    };
+    return b;
+  }
   function filterSelect(value, list, placeholder, onChange) {
     var sel = el('select', 'filter-select');
     var blank = document.createElement('option'); blank.value = ''; blank.textContent = placeholder; sel.appendChild(blank);
@@ -81,9 +92,20 @@ window.MOA = window.MOA || {};
     var status = M.statusDistribution();
     var legend = '<div class="legend"><span><i style="background:' + M.HEX.progress + '"></i> أسبوعي</span><span><i style="background:' + M.HEX.ink + '"></i> تراكمي</span></div>';
     var emptyMini = '<div class="empty" style="padding:24px">أضِف أعضاء الفريق لعرض هذا الرسم.</div>';
+    // goals: progress toward target KPIs
+    var goalCards = M.goals().map(function (g) {
+      var rc = Math.max(0, Math.min(1, g.ratio));
+      var hex = g.ratio >= 1 ? M.HEX.done : M.HEX.progress;
+      var reached = g.target > 0 && g.value >= g.target;
+      var cap = g.value + g.unit + ' / ' + g.target + g.unit + (reached ? ' ✓ تحقّق' : ' هدف');
+      return '<div class="card"><div class="card-title">' + g.label + '</div><div class="donut-wrap">' +
+        M.donut(rc, hex) + '<div class="donut-cap">' + cap + '</div></div></div>';
+    }).join('');
     var wrap = el('div', 'wrap');
     wrap.innerHTML =
       '<div class="grid kpis">' + kpi + '</div>' +
+      '<div class="section-title">الأهداف والمؤشرات المستهدفة <span style="font-weight:500;color:var(--muted);font-size:12px">حرّر القيم من الإعدادات</span></div>' +
+      '<div class="goals-grid">' + goalCards + '</div>' +
       '<div class="grid charts">' +
       '<div class="card col-3"><div class="card-title">إنجاز المهام</div><div class="donut-wrap">' + M.donut(k.completion, M.HEX.approved) + '<div class="donut-cap">' + k.done + ' من ' + k.total + ' مهمة</div></div></div>' +
       '<div class="card col-3"><div class="card-title">نشر المحتوى</div><div class="donut-wrap">' + M.donut(k.publish, M.HEX.done) + '<div class="donut-cap">' + k.pub + ' من ' + k.cTotal + ' محتوى</div></div></div>' +
@@ -113,7 +135,7 @@ window.MOA = window.MOA || {};
     var opts = {
       onChange: save,
       onAdd: function () { S().content.push({ id: M.nextId(S().content, 'C'), date: '', week: '', platform: '', type: '', title: '', owner: '', status: 'فكرة', assetUrl: '', publishedDate: '', notes: '' }); save(); M.showView('content'); },
-      onDelete: function (row) { var a = S().content; a.splice(a.indexOf(row), 1); save(); M.showView('content'); M.toast('تم حذف الصف', 'info'); },
+      onDelete: function (row) { var a = S().content; var i = a.indexOf(row); if (i < 0) return; a.splice(i, 1); save(); M.showView('content'); M.toastUndo('تم حذف المحتوى', function () { a.splice(i, 0, row); save(); M.showView('content'); }); },
       addLabel: 'إضافة محتوى'
     };
     c.appendChild(head('خطة المحتوى', 'تقويم المحتوى — أعطِ كل عنصر رقماً (C-00X) لربط المهام به'));
@@ -140,6 +162,7 @@ window.MOA = window.MOA || {};
     bar.appendChild(filterSelect(contentFilter.status, S().lists.contentStatuses, 'كل الحالات', function (v) { contentFilter.status = v; renderTable(); }));
     bar.appendChild(filterSelect(contentFilter.week, S().lists.weeks, 'كل الأسابيع', function (v) { contentFilter.week = v; renderTable(); }));
     bar.appendChild(clr);
+    bar.appendChild(csvButton(function () { return filterContent(S().content); }, schema, 'المحتوى'));
     c.appendChild(bar);
     c.appendChild(host);
     renderTable();
@@ -158,14 +181,14 @@ window.MOA = window.MOA || {};
       { key: 'due', label: 'تاريخ التسليم', type: 'date' },
       { key: 'status', label: 'الحالة', pill: true, source: function () { return S().lists.taskStatuses; } },
       { key: 'effort', label: 'الجهد (ساعات)', type: 'number' },
-      { key: 'overdue', label: 'متأخرة؟', type: 'computed', compute: function (r) { return M.isOverdue(r) ? { text: 'متأخرة', cls: 'tag-late' } : { text: '' }; } },
+      { key: 'overdue', label: 'الاستحقاق', type: 'computed', compute: function (r) { return M.isOverdue(r) ? { text: 'متأخرة', cls: 'tag-late' } : (M.isDueSoon(r) ? { text: 'قريباً', cls: 'tag-soon' } : { text: '' }); } },
       { key: 'notes', label: 'ملاحظات', type: 'text' }
     ];
     var opts = {
-      rowClass: function (r) { return M.isOverdue(r) ? 'is-late' : ''; },
+      rowClass: function (r) { return M.isOverdue(r) ? 'is-late' : (M.isDueSoon(r) ? 'is-soon' : ''); },
       onChange: function (row, key) { save(); if (key === 'due' || key === 'status') M.showView('tasks'); },
       onAdd: function () { S().tasks.push({ id: M.nextId(S().tasks, 'T'), task: '', contentId: '', domain: '', owner: '', priority: 'متوسطة', start: '', due: '', status: 'لم تبدأ', effort: '', notes: '' }); save(); M.showView('tasks'); },
-      onDelete: function (row) { var a = S().tasks; a.splice(a.indexOf(row), 1); save(); M.showView('tasks'); M.toast('تم حذف المهمة', 'info'); },
+      onDelete: function (row) { var a = S().tasks; var i = a.indexOf(row); if (i < 0) return; a.splice(i, 1); save(); M.showView('tasks'); M.toastUndo('تم حذف المهمة', function () { a.splice(i, 0, row); save(); M.showView('tasks'); }); },
       addLabel: 'إضافة مهمة'
     };
     c.appendChild(head('المهام', 'اربط المهمة بالمحتوى، وحدّد المسؤول والأولوية والحالة — التأخير يُحسب تلقائياً'));
@@ -191,6 +214,7 @@ window.MOA = window.MOA || {};
     bar.appendChild(filterSelect(taskFilter.status, S().lists.taskStatuses, 'كل الحالات', function (v) { taskFilter.status = v; renderTable(); }));
     bar.appendChild(filterSelect(taskFilter.priority, S().lists.priorities, 'كل الأولويات', function (v) { taskFilter.priority = v; renderTable(); }));
     bar.appendChild(clr);
+    bar.appendChild(csvButton(function () { return filterTasks(S().tasks); }, schema, 'المهام'));
     c.appendChild(bar);
     c.appendChild(host);
     renderTable();
@@ -209,7 +233,7 @@ window.MOA = window.MOA || {};
     var card = M.tables.render(S().team, schema, {
       onChange: save,
       onAdd: function () { S().team.push({ member: '', role: '', area: '' }); save(); M.showView('team'); },
-      onDelete: function (row) { var a = S().team; a.splice(a.indexOf(row), 1); save(); M.showView('team'); M.toast('تم حذف العضو', 'info'); },
+      onDelete: function (row) { var a = S().team; var i = a.indexOf(row); if (i < 0) return; a.splice(i, 1); save(); M.showView('team'); M.toastUndo('تم حذف العضو', function () { a.splice(i, 0, row); save(); M.showView('team'); }); },
       addLabel: 'إضافة عضو'
     });
     c.appendChild(head('الفريق', 'الأعضاء وأدوارهم — أعمدة العبء تُحسب تلقائياً من المهام والمحتوى'));
@@ -257,6 +281,20 @@ window.MOA = window.MOA || {};
     zone.appendChild(bExp); zone.appendChild(bImp); zone.appendChild(bRes); zone.appendChild(bClr);
     dc.appendChild(zone);
     wrap.appendChild(dc);
+
+    // targets / goals
+    var tc = el('div', 'card'); tc.style.marginTop = '16px';
+    tc.innerHTML = '<div class="card-title">الأهداف والمؤشرات المستهدفة</div>';
+    var tg = S().settings.targets || (S().settings.targets = { published: 10, completion: 80, content: 12 });
+    [['published', 'هدف المحتوى المنشور', ''], ['completion', 'هدف نسبة الإنجاز', '%'], ['content', 'هدف إجمالي المحتوى', '']]
+      .forEach(function (p) {
+        var row = el('div', 'le-row'); row.style.maxWidth = '320px';
+        row.innerHTML = '<span style="color:var(--muted);font-size:13px">' + p[1] + (p[2] ? ' (' + p[2] + ')' : '') + ':</span>';
+        var inp = el('input'); inp.type = 'number'; inp.min = '0'; inp.value = (tg[p[0]] != null ? tg[p[0]] : '');
+        inp.addEventListener('input', function () { tg[p[0]] = inp.value === '' ? 0 : parseFloat(inp.value); M.saveQuiet(); });
+        row.appendChild(inp); tc.appendChild(row);
+      });
+    wrap.appendChild(tc);
 
     // lists
     var grid = el('div', 'settings-grid'); grid.style.marginTop = '16px';
@@ -373,7 +411,7 @@ window.MOA = window.MOA || {};
 
       var body = el('div', 'kb-body');
       inCol.forEach(function (t) {
-        var card = el('div', 'kb-card' + (M.isOverdue(t) ? ' is-late' : ''));
+        var card = el('div', 'kb-card' + (M.isOverdue(t) ? ' is-late' : (M.isDueSoon(t) ? ' is-soon' : '')));
         card.draggable = true;
         var pr = t.priority ? '<span class="kb-pill p-' + M.colorKey(t.priority) + '">' + esc(t.priority) + '</span>' : '';
         var owner = t.owner ? '<span class="kb-owner">' + esc(t.owner) + '</span>' : '';
@@ -500,6 +538,45 @@ window.MOA = window.MOA || {};
     leg.innerHTML = legend.map(function (l) { return '<span class="gl"><i style="background:var(--' + l[1] + ')"></i>' + l[0] + '</span>'; }).join('');
     wrap.appendChild(leg);
 
+    c.appendChild(wrap);
+  };
+
+  /* ---------- Global search ---------- */
+  M.views.search = function (c) {
+    var raw = (M.searchQuery || '').trim();
+    var q = raw.toLowerCase();
+    c.appendChild(head('نتائج البحث', raw ? 'بحث عن: «' + esc(raw) + '»' : 'بحث شامل في المحتوى والمهام'));
+    var wrap = el('div', 'wrap');
+    if (!q) {
+      var e0 = el('div', 'empty'); e0.textContent = 'اكتب كلمة في صندوق البحث بالأعلى للبحث في المحتوى والمهام.';
+      wrap.appendChild(e0); c.appendChild(wrap); return;
+    }
+    function inc(v) { return String(v == null ? '' : v).toLowerCase().indexOf(q) >= 0; }
+    var cm = S().content.filter(function (x) { return (x.title || x.id) && (inc(x.title) || inc(x.notes) || inc(x.id) || inc(x.platform) || inc(x.owner) || inc(x.status)); });
+    var tm = S().tasks.filter(function (x) { return (x.task || x.id) && (inc(x.task) || inc(x.notes) || inc(x.id) || inc(x.owner) || inc(x.status) || inc(x.domain)); });
+
+    function resultCard(title, items, render, goView) {
+      var card = el('div', 'card'); card.style.marginBottom = '16px';
+      card.innerHTML = '<div class="card-title">' + title + ' <span style="font-weight:600;color:var(--muted);font-size:12px">' + items.length + '</span></div>';
+      if (!items.length) { var em = el('div'); em.style.cssText = 'color:var(--muted);font-size:13px'; em.textContent = 'لا نتائج'; card.appendChild(em); return card; }
+      var list = el('div', 'search-results');
+      items.forEach(function (it) {
+        var row = el('button', 'search-item'); row.innerHTML = render(it);
+        row.onclick = function () { M.showView(goView); };
+        list.appendChild(row);
+      });
+      card.appendChild(list); return card;
+    }
+    wrap.appendChild(resultCard('المحتوى', cm, function (it) {
+      return '<span class="si-id">' + esc(it.id || '') + '</span><span class="si-title">' + esc(it.title || '(بدون عنوان)') + '</span>' +
+        '<span class="si-meta">' + esc(it.platform || '') + '</span>' +
+        '<span class="pill-tag p-' + M.colorKey(it.status) + '">' + esc(it.status || '') + '</span>';
+    }, 'content'));
+    wrap.appendChild(resultCard('المهام', tm, function (it) {
+      return '<span class="si-id">' + esc(it.id || '') + '</span><span class="si-title">' + esc(it.task || '(بدون وصف)') + '</span>' +
+        '<span class="si-meta">' + esc(it.owner || '') + '</span>' +
+        '<span class="pill-tag p-' + M.colorKey(it.status) + '">' + esc(it.status || '') + '</span>';
+    }, 'tasks'));
     c.appendChild(wrap);
   };
 

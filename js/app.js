@@ -26,7 +26,7 @@
     if (wasDark) { root.removeAttribute('data-theme'); if (M.currentView) M.showView(M.currentView); }
 
     var s = (M.state && M.state.settings) || {};
-    var active = document.querySelector('.nav-item.is-active span:last-child');
+    var active = document.querySelector('.nav-item.is-active span:not([class])');
     var viewName = active ? active.textContent : '';
     var ph = $('printHeader');
     if (ph) {
@@ -47,16 +47,41 @@
     $('updatedAt').textContent = 'آخر تحديث: ' + (s.updatedAt || '—');
     $('periodChip').textContent = s.period || '—';
   }
-  M.onSaved = updateHeader;
+
+  /* task alert badge on the «المهام» nav item */
+  M.refreshBadges = function () {
+    var b = $('tasksBadge');
+    if (!b || !M.state) return;
+    var a = M.taskAlerts();
+    if (a.overdue > 0) { b.textContent = a.overdue; b.hidden = false; b.className = 'nav-badge badge-late'; b.title = a.overdue + ' مهمة متأخرة'; }
+    else if (a.dueSoon > 0) { b.textContent = a.dueSoon; b.hidden = false; b.className = 'nav-badge badge-soon'; b.title = a.dueSoon + ' مهمة تستحق قريباً'; }
+    else { b.hidden = true; b.textContent = ''; }
+  };
+
+  M.onSaved = function () { updateHeader(); M.refreshBadges(); };
   M.saveQuiet = M.save;
 
   /* toast */
+  function dismissToast(t) { t.style.opacity = '0'; t.style.transition = '.3s'; setTimeout(function () { t.remove(); }, 320); }
   M.toast = function (msg, type) {
     var w = $('toastWrap'), t = document.createElement('div');
     t.className = 'toast ' + (type || 'ok');
     t.innerHTML = '<i></i><span>' + msg + '</span>';
     w.appendChild(t);
-    setTimeout(function () { t.style.opacity = '0'; t.style.transition = '.3s'; setTimeout(function () { t.remove(); }, 320); }, 2200);
+    setTimeout(function () { dismissToast(t); }, 2200);
+  };
+
+  /* toast with an «تراجع» (undo) action — used for safe deletes */
+  M.toastUndo = function (msg, onUndo) {
+    var w = $('toastWrap'), t = document.createElement('div');
+    t.className = 'toast info';
+    t.innerHTML = '<i></i><span>' + msg + '</span>';
+    var btn = document.createElement('button');
+    btn.className = 'toast-action'; btn.textContent = 'تراجع';
+    var to = setTimeout(function () { dismissToast(t); }, 6000);
+    btn.onclick = function () { clearTimeout(to); dismissToast(t); onUndo(); };
+    t.appendChild(btn);
+    w.appendChild(t);
   };
 
   /* modal confirm */
@@ -83,12 +108,26 @@
   document.addEventListener('DOMContentLoaded', function () {
     M.load();
     updateHeader();
+    M.refreshBadges();
     M.showView('dashboard');
 
     // nav
     var items = document.querySelectorAll('.nav-item');
     for (var i = 0; i < items.length; i++) {
       items[i].addEventListener('click', function () { M.showView(this.getAttribute('data-view')); });
+    }
+    // global search
+    var gs = $('globalSearch');
+    if (gs) {
+      var deb;
+      gs.addEventListener('input', function () {
+        clearTimeout(deb);
+        deb = setTimeout(function () {
+          M.searchQuery = gs.value;
+          if (gs.value.trim()) M.showView('search');
+          else if (M.currentView === 'search') M.showView('dashboard');
+        }, 200);
+      });
     }
     // mobile nav
     $('navToggle').addEventListener('click', function () {

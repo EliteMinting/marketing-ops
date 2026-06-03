@@ -81,11 +81,49 @@ window.MOA = window.MOA || {};
     } else {
       var table = el('table', 'data');
       var thead = el('thead'), htr = el('tr');
-      schema.forEach(function (col) { var th = el('th'); th.textContent = col.label; htr.appendChild(th); });
+      var sortKey = null, sortDir = 1, ths = {};
+
+      function cellVal(row, col) {
+        if (col.type === 'computed') { try { return col.compute(row).text || ''; } catch (e) { return ''; } }
+        return row[col.key];
+      }
+      function cmp(a, b, col) {
+        var va = cellVal(a, col), vb = cellVal(b, col);
+        if (col.type === 'number') return (parseFloat(va) || 0) - (parseFloat(vb) || 0);
+        return String(va == null ? '' : va).localeCompare(String(vb == null ? '' : vb), 'ar', { numeric: true });
+      }
+      function indicators() {
+        schema.forEach(function (col) {
+          var th = ths[col.key]; if (!th) return;
+          th.querySelector('.sort-ind').textContent = (sortKey === col.key) ? (sortDir > 0 ? ' ▲' : ' ▼') : '';
+        });
+      }
+      var tbody = el('tbody');
+      function renderBody() {
+        var display = rows.slice();
+        if (sortKey) {
+          var col = schema.filter(function (c) { return c.key === sortKey; })[0];
+          if (col) display.sort(function (a, b) { return cmp(a, b, col) * sortDir; });
+        }
+        tbody.innerHTML = '';
+        display.forEach(function (row, idx) { tbody.appendChild(buildRow(row, idx)); });
+      }
+
+      schema.forEach(function (col) {
+        var th = el('th');
+        th.innerHTML = '<span>' + esc(col.label) + '</span><span class="sort-ind"></span>';
+        if (col.type !== 'id') {
+          th.classList.add('sortable');
+          th.addEventListener('click', function () {
+            if (sortKey === col.key) sortDir = -sortDir; else { sortKey = col.key; sortDir = 1; }
+            renderBody(); indicators();
+          });
+        }
+        ths[col.key] = th; htr.appendChild(th);
+      });
       htr.appendChild(el('th', 'col-actions'));
       thead.appendChild(htr); table.appendChild(thead);
-      var tbody = el('tbody');
-      rows.forEach(function (row, idx) { tbody.appendChild(buildRow(row, idx)); });
+      renderBody();
       table.appendChild(tbody);
       scroll.appendChild(table); card.appendChild(scroll);
     }

@@ -17,6 +17,7 @@ window.MOA = window.MOA || {};
     s.content=s.content||[]; s.tasks=s.tasks||[]; s.team=s.team||[];
     s.lists=Object.assign(clone(M.LISTS), s.lists||{});
     s.settings=Object.assign({period:'يونيو 2026',updatedAt:todayISO()}, s.settings||{});
+    s.settings.targets=Object.assign({published:10,completion:80,content:12}, s.settings.targets||{});
     return s;
   }
 
@@ -43,12 +44,30 @@ window.MOA = window.MOA || {};
     M.state.content=[]; M.state.tasks=[]; M.state.team=[]; M.save();
   };
 
-  M.exportJSON = function(){
-    var blob=new Blob([JSON.stringify(M.state,null,2)],{type:'application/json'});
+  function download(blob, name){
     var url=URL.createObjectURL(blob), a=document.createElement('a');
-    a.href=url; a.download='نظام-التسويق-'+todayISO()+'.json';
+    a.href=url; a.download=name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  }
+
+  /* CSV export (UTF-8 BOM so Excel reads Arabic correctly) */
+  function csvCell(v){
+    var s=(v==null?'':String(v));
+    return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }
+  M.exportCSV = function(rows, columns, filename){
+    var head=columns.map(function(c){return csvCell(c.label);}).join(',');
+    var body=rows.map(function(r){
+      return columns.map(function(c){return csvCell(r[c.key]);}).join(',');
+    }).join('\r\n');
+    var blob=new Blob(['﻿'+head+'\r\n'+body], {type:'text/csv;charset=utf-8;'});
+    download(blob, filename+'-'+todayISO()+'.csv');
+  };
+
+  M.exportJSON = function(){
+    var blob=new Blob([JSON.stringify(M.state,null,2)],{type:'application/json'});
+    download(blob, 'نظام-التسويق-'+todayISO()+'.json');
   };
 
   M.importJSON = function(file, done){
