@@ -41,6 +41,36 @@
     if (wasDark) { root.setAttribute('data-theme', 'dark'); if (M.currentView) M.showView(M.currentView); }
   };
 
+  var reduceMotion = false;
+  try { reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+  /* dismiss the splash overlay */
+  function dismissSplash() {
+    var s = $('splash'); if (!s) return;
+    s.classList.add('is-done');
+    setTimeout(function () { if (s.parentNode) s.remove(); }, 450);
+  }
+
+  /* count-up animation for KPI numbers (e.g. "12" or "33%") */
+  M.animateCounts = function (root) {
+    if (!root) return;
+    var els = root.querySelectorAll('.kpi-num');
+    els.forEach(function (el) {
+      var m = /^(\d+)(%?)$/.exec(el.textContent.trim());
+      if (!m) return;
+      var target = parseInt(m[1], 10), suffix = m[2];
+      if (reduceMotion || target === 0) { el.textContent = target + suffix; return; }
+      var dur = 650, t0 = performance.now();
+      function step(now) {
+        var p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(target * e) + suffix;
+        if (p < 1) requestAnimationFrame(step);
+      }
+      el.textContent = '0' + suffix;
+      requestAnimationFrame(step);
+    });
+  };
+
   /* header sync (period chip/updated were moved out of the topbar; settings still holds them) */
   function updateHeader() {
     var s = (M.state && M.state.settings) || {};
@@ -112,6 +142,7 @@
     updateHeader();
     M.refreshBadges();
     M.showView('dashboard');
+    setTimeout(dismissSplash, reduceMotion ? 250 : 950);
 
     // nav — covers the desktop sidebar, the mobile bottom bar, and the «المزيد» sheet
     var navItems = document.querySelectorAll('[data-view]');

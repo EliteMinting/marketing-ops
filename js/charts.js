@@ -3,6 +3,7 @@ window.MOA = window.MOA || {};
 (function (M) {
   "use strict";
   var H = M.HEX, FONT = "Tajawal, 'Segoe UI', sans-serif";
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 
   /* themed neutrals — read from CSS variables so charts follow light/dark.
      Status colors stay from M.HEX (pastels work on both backgrounds). */
@@ -88,6 +89,43 @@ window.MOA = window.MOA || {};
   };
 
   M.statusBars = function (items) { return M.hbars(items); };
+
+  /* small ring (for capacity cards) */
+  function miniRing(pct, hex) {
+    pct = Math.max(0, Math.min(1, pct || 0));
+    var nu = N(), r = 18, c = 22, C = 2 * Math.PI * r, len = pct * C;
+    return '<svg viewBox="0 0 44 44" width="44" height="44" style="direction:ltr">' +
+      '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + nu.track + '" stroke-width="5"/>' +
+      '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + hex + '" stroke-width="5" stroke-linecap="round" stroke-dasharray="' + len.toFixed(1) + ' ' + (C - len).toFixed(1) + '" transform="rotate(-90 ' + c + ' ' + c + ')"/></svg>';
+  }
+  /* team capacity cards: items=[{name, open, content, effort}] — HTML (theme-aware via CSS vars) */
+  M.capacityCards = function (items) {
+    if (!items.length) return '<div class="empty" style="padding:24px">أضِف أعضاء الفريق لعرض هذا الرسم.</div>';
+    var maxLoad = Math.max.apply(null, items.map(function (m) { return m.open; }).concat([1]));
+    return '<div class="cap-list">' + items.map(function (m) {
+      var ratio = m.open / maxLoad;
+      var hex = ratio >= 0.99 ? H.late : (ratio >= 0.6 ? H.hold : H.progress);
+      var ch = (String(m.name || '').trim()[0]) || '؟';
+      return '<div class="cap-row">' +
+        '<div class="cap-ring">' + miniRing(ratio, hex) + '<span class="cap-ring-num">' + m.open + '</span></div>' +
+        '<div class="cap-info"><div class="cap-name">' + esc(m.name) + '</div>' +
+        '<div class="cap-meta">' + m.open + ' مهام مفتوحة · ' + m.effort + ' س جهد · ' + m.content + ' محتوى</div></div>' +
+        '<div class="cap-av">' + esc(ch) + '</div></div>';
+    }).join('') + '</div>';
+  };
+
+  /* single stacked proportion bar + legend: items=[{label,value,color}] */
+  M.statusStack = function (items) {
+    var total = items.reduce(function (s, d) { return s + d.value; }, 0);
+    if (!total) return '<div class="empty" style="padding:24px">لا توجد مهام بعد.</div>';
+    var seg = items.filter(function (d) { return d.value > 0; }).map(function (d) {
+      return '<span class="stk-seg" style="width:' + (d.value / total * 100) + '%;background:var(--' + d.color + ')" title="' + esc(d.label) + ': ' + d.value + '"></span>';
+    }).join('');
+    var legend = items.map(function (d) {
+      return '<span class="stk-leg"><i style="background:var(--' + d.color + ')"></i>' + esc(d.label) + ' <b>' + d.value + '</b></span>';
+    }).join('');
+    return '<div class="stk-bar">' + seg + '</div><div class="stk-legend">' + legend + '</div>';
+  };
 
   /* vertical rounded-top bars (monochrome, one highlighted) — items=[{label,value,highlight?}] */
   M.vbars = function (items, opts) {
