@@ -7,10 +7,16 @@ window.MOA = window.MOA || {};
   function S() { return M.state; }
   function members() { return S().team.map(function (m) { return m.member; }).filter(Boolean); }
   function contentIds() { return S().content.map(function (c) { return c.id; }).filter(Boolean); }
+  /* the page title now lives in the topbar (#pageTitle); here we render a compact subtitle only */
   function head(title, desc) {
     var h = el('div', 'view-head');
-    h.innerHTML = '<div><div class="view-title">' + title + '</div><div class="view-desc">' + desc + '</div></div>';
+    h.innerHTML = '<div class="view-desc">' + desc + '</div>';
     return h;
+  }
+  /* small circular avatar from a name's first letter */
+  function avatar(name) {
+    var ch = (String(name || '').trim()[0]) || '؟';
+    return '<span class="avatar-xs" title="' + esc(name || '') + '">' + esc(ch) + '</span>';
   }
   function save() { M.save(); }
 
@@ -78,25 +84,53 @@ window.MOA = window.MOA || {};
   /* ---------- Dashboard ---------- */
   M.views.dashboard = function (c) {
     var k = M.kpis();
+    var dl = M.kpiDeltas(); // {total,done,prog,late,pub,cTotal,completion,rate} or null
+    function delta(key, goodUp, unit) {
+      if (!dl || dl[key] == null) return '';
+      var d = dl[key];
+      if (d === 0) return '<div class="kpi-foot"><span class="kpi-delta flat">▬ بلا تغيير عن الشهر الماضي</span></div>';
+      var up = d > 0, good = goodUp ? up : !up;
+      return '<div class="kpi-foot"><span class="kpi-delta ' + (good ? 'up' : 'down') + '">' +
+        (up ? '▲ +' : '▼ ') + d + (unit || '') + '</span> عن الشهر الماضي</div>';
+    }
+    // [key, label, displayNum, deltaUnit, goodWhenUp, featured]
     var cards = [
-      ['total', 'إجمالي المهام', k.total, ''],
-      ['done', 'مكتملة', k.done, ''],
-      ['prog', 'قيد التنفيذ', k.prog, ''],
-      ['late', 'متأخرة', k.late, k.late ? 'تحتاج انتباه' : 'لا يوجد'],
-      ['pub', 'محتوى منشور', k.pub, ''],
-      ['rate', 'نسبة النشر', Math.round(k.rate * 100) + '%', '']
+      ['total', 'إجمالي المهام', k.total, '', true, true],
+      ['done', 'مكتملة', k.done, '', true, false],
+      ['prog', 'قيد التنفيذ', k.prog, '', true, false],
+      ['late', 'متأخرة', k.late, '', false, false],
+      ['pub', 'محتوى منشور', k.pub, '', true, false],
+      ['rate', 'نسبة النشر', Math.round(k.rate * 100) + '%', '%', true, false]
     ];
     var kpi = cards.map(function (x) {
-      return '<div class="card kpi kpi--' + x[0] + '"><div class="kpi-accent"></div>' +
+      return '<div class="card kpi kpi--' + x[0] + (x[5] ? ' kpi--feature' : '') + '">' +
+        '<div class="kpi-accent"></div>' +
         '<div class="kpi-label">' + x[1] + '</div><div class="kpi-num">' + x[2] + '</div>' +
-        (x[3] ? '<div class="kpi-foot">' + x[3] + '</div>' : '') + '</div>';
+        delta(x[0], x[4], x[3]) + '</div>';
     }).join('');
+
     var trend = M.weeklyTrend();
+    var maxW = Math.max.apply(null, trend.map(function (d) { return d.weekly; }).concat([0]));
+    var vbarsData = trend.map(function (d) { return { label: d.week.replace('الأسبوع ', 'أ'), value: d.weekly, highlight: maxW > 0 && d.weekly === maxW }; });
     var work = M.workload();
     var status = M.statusDistribution();
-    var legend = '<div class="legend"><span><i style="background:' + M.HEX.progress + '"></i> أسبوعي</span><span><i style="background:' + M.HEX.ink + '"></i> تراكمي</span></div>';
     var emptyMini = '<div class="empty" style="padding:24px">أضِف أعضاء الفريق لعرض هذا الرسم.</div>';
-    // goals: progress toward target KPIs
+
+    // "this week" strip — open tasks due per day, today highlighted
+    function weekstrip() {
+      var z = function (n) { return String(n).padStart(2, '0'); };
+      var names = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      var today = new Date(M.todayISO() + 'T00:00:00'), cells = '';
+      for (var i = 0; i < 7; i++) {
+        var d = new Date(today); d.setDate(d.getDate() + i);
+        var iso = d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
+        var cnt = S().tasks.filter(function (t) { return t.due === iso && t.status !== 'مكتملة' && (t.task || '').trim(); }).length;
+        cells += '<div class="ws-day' + (i === 0 ? ' is-today' : '') + '"><div class="ws-dow">' + names[d.getDay()] + '</div>' +
+          '<div class="ws-num">' + d.getDate() + '</div><div class="ws-cnt' + (cnt ? ' has' : '') + '">' + (cnt ? cnt : '—') + '</div></div>';
+      }
+      return '<div class="weekstrip">' + cells + '</div>';
+    }
+
     var goalCards = M.goals().map(function (g) {
       var rc = Math.max(0, Math.min(1, g.ratio));
       var hex = g.ratio >= 1 ? M.HEX.done : M.HEX.progress;
@@ -105,18 +139,19 @@ window.MOA = window.MOA || {};
       return '<div class="card"><div class="card-title">' + g.label + '</div><div class="donut-wrap">' +
         M.donut(rc, hex) + '<div class="donut-cap">' + cap + '</div></div></div>';
     }).join('');
+
     var wrap = el('div', 'wrap');
     wrap.innerHTML =
       '<div class="grid kpis">' + kpi + '</div>' +
-      '<div class="section-title">الأهداف والمؤشرات المستهدفة <span style="font-weight:500;color:var(--muted);font-size:12px">حرّر القيم من الإعدادات</span></div>' +
-      '<div class="goals-grid">' + goalCards + '</div>' +
       '<div class="grid charts">' +
-      '<div class="card col-3"><div class="card-title">إنجاز المهام</div><div class="donut-wrap">' + M.donut(k.completion, M.HEX.approved) + '<div class="donut-cap">' + k.done + ' من ' + k.total + ' مهمة</div></div></div>' +
-      '<div class="card col-3"><div class="card-title">نشر المحتوى</div><div class="donut-wrap">' + M.donut(k.publish, M.HEX.done) + '<div class="donut-cap">' + k.pub + ' من ' + k.cTotal + ' محتوى</div></div></div>' +
-      '<div class="card col-6"><div class="card-title">المحتوى عبر الأسابيع</div>' + M.lineTrend(trend) + legend + '</div>' +
-      '<div class="card col-6"><div class="card-title">عبء العمل لكل عضو <span style="font-weight:500;color:var(--muted);font-size:12px">مهام مفتوحة</span></div>' + (work.length ? M.hbars(work, 'progress') : emptyMini) + '</div>' +
+      '<div class="card col-8"><div class="card-title">المحتوى عبر الأسابيع <span class="ct-sub">عدد العناصر أسبوعياً</span></div>' + M.vbars(vbarsData) + '</div>' +
+      '<div class="card col-4"><div class="card-title">نسبة الإنجاز</div><div class="donut-wrap">' + M.donut(k.completion, M.HEX.approved) + '<div class="donut-cap">' + k.done + ' من ' + k.total + ' مهمة</div></div></div>' +
+      '<div class="card col-12"><div class="card-title">هذا الأسبوع <span class="ct-sub">المهام المستحقة لكل يوم</span></div>' + weekstrip() + '</div>' +
+      '<div class="card col-6"><div class="card-title">عبء العمل لكل عضو <span class="ct-sub">مهام مفتوحة</span></div>' + (work.length ? M.hbars(work, 'progress') : emptyMini) + '</div>' +
       '<div class="card col-6"><div class="card-title">توزيع حالات المهام</div>' + M.statusBars(status) + '</div>' +
-      '</div>';
+      '</div>' +
+      '<div class="section-title">الأهداف والمؤشرات المستهدفة <span class="ct-sub">حرّر القيم من الإعدادات</span></div>' +
+      '<div class="goals-grid">' + goalCards + '</div>';
     c.appendChild(head('لوحة التحكم', 'نظرة عامة لحظية على أداء الفريق — تتحدّث تلقائياً مع كل تعديل'));
     c.appendChild(wrap);
   };
@@ -732,6 +767,11 @@ window.MOA = window.MOA || {};
   };
 
   /* ---------- nav ---------- */
+  var TITLES = {
+    dashboard: 'لوحة التحكم', assistant: 'المساعد الذكي', content: 'خطة المحتوى',
+    calendar: 'تقويم المحتوى', tasks: 'المهام', kanban: 'لوحة كانبان', gantt: 'المخطط الزمني',
+    team: 'الفريق', settings: 'الإعدادات', help: 'كيفية الاستخدام', search: 'نتائج البحث'
+  };
   M.showView = function (name) {
     if (!M.views[name]) name = 'dashboard';
     M.currentView = name;
@@ -739,6 +779,7 @@ window.MOA = window.MOA || {};
     M.views[name](c); c.scrollTop = 0;
     var items = document.querySelectorAll('[data-view]');
     for (var i = 0; i < items.length; i++) items[i].classList.toggle('is-active', items[i].getAttribute('data-view') === name);
+    var pt = document.getElementById('pageTitle'); if (pt) pt.textContent = TITLES[name] || '';
     if (M.closeSheet) M.closeSheet();
   };
 

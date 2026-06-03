@@ -18,8 +18,21 @@ window.MOA = window.MOA || {};
     s.lists=Object.assign(clone(M.LISTS), s.lists||{});
     s.settings=Object.assign({period:'يونيو 2026',updatedAt:todayISO()}, s.settings||{});
     s.settings.targets=Object.assign({published:10,completion:80,content:12}, s.settings.targets||{});
+    s.settings.history = s.settings.history || {};
     return s;
   }
+
+  /* record a KPI snapshot for the current month (for honest month-over-month deltas) */
+  function captureSnapshot(){
+    if(!M.state || !M.kpis) return;
+    var k=M.kpis(), mo=todayISO().slice(0,7); // YYYY-MM
+    M.state.settings.history = M.state.settings.history || {};
+    M.state.settings.history[mo] = {
+      total:k.total, done:k.done, prog:k.prog, late:k.late,
+      cTotal:k.cTotal, pub:k.pub, completion:Math.round(k.completion*100), rate:Math.round(k.rate*100)
+    };
+  }
+  M.captureSnapshot = captureSnapshot;
 
   M.load = function(){
     try{
@@ -34,6 +47,7 @@ window.MOA = window.MOA || {};
   M.save = function(){
     if(!M.state) return;
     M.state.settings.updatedAt = todayISO();
+    captureSnapshot();
     try{ localStorage.setItem(KEY, JSON.stringify(M.state)); }
     catch(e){ console.warn('save failed', e); }
     if(M.onSaved) M.onSaved();

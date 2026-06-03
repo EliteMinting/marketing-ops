@@ -89,4 +89,31 @@ window.MOA = window.MOA || {};
 
   M.statusBars = function (items) { return M.hbars(items); };
 
+  /* vertical rounded-top bars (monochrome, one highlighted) — items=[{label,value,highlight?}] */
+  M.vbars = function (items, opts) {
+    opts = opts || {};
+    var nu = N();
+    var W = 380, H = 210, pT = 16, pB = 30, pL = 22, pR = 10;
+    var max = Math.max.apply(null, items.map(function (d) { return d.value; }).concat([1]));
+    var innerW = W - pL - pR, innerH = H - pT - pB, base = H - pB;
+    var slot = innerW / Math.max(1, items.length);
+    var bw = Math.min(slot * 0.52, 30);
+    var g = '';
+    [0, max / 2, max].forEach(function (v) {
+      var y = base - (v / max) * innerH;
+      g += '<line x1="' + pL + '" y1="' + y + '" x2="' + (W - pR) + '" y2="' + y + '" stroke="' + nu.grid + '" stroke-width="1"/>';
+      g += '<text x="' + (W - pR + 2) + '" y="' + (y - 3) + '" font-family="' + FONT + '" font-size="9" fill="' + nu.muted + '" text-anchor="end">' + Math.round(v) + '</text>';
+    });
+    var bars = '';
+    items.forEach(function (d, i) {
+      var cx = (W - pR) - (i + 0.5) * slot;           // RTL: first item at right
+      var h = Math.max(3, (d.value / max) * innerH);
+      var x = cx - bw / 2, y = base - h;
+      var fill = d.highlight ? (opts.hl || nu.muted) : (opts.fill || nu.ink);
+      bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="7" fill="' + fill + '"/>';
+      bars += '<text x="' + cx.toFixed(1) + '" y="' + (H - 10) + '" font-family="' + FONT + '" font-size="10" font-weight="' + (d.highlight ? '800' : '600') + '" fill="' + (d.highlight ? nu.ink : nu.muted) + '" text-anchor="middle">' + d.label + '</text>';
+    });
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg">' + g + bars + '</svg>';
+  };
+
 })(window.MOA);
