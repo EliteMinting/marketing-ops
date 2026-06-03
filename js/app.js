@@ -3,6 +3,21 @@
   "use strict";
   function $(id) { return document.getElementById(id); }
 
+  /* theme (stored separately from user data) */
+  var THEME_KEY = 'moa.theme';
+  function currentTheme() { try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { return 'light'; } }
+  function applyTheme(t) {
+    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  applyTheme(currentTheme()); // apply as early as the script runs to limit flash
+  M.toggleTheme = function () {
+    var next = currentTheme() === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    applyTheme(next);
+    if (M.currentView) M.showView(M.currentView); // re-render so charts pick up themed neutrals
+  };
+
   /* header sync */
   function updateHeader() {
     var s = M.state.settings || {};
@@ -59,6 +74,8 @@
     $('scrim').addEventListener('click', function () {
       $('sidenav').classList.remove('open'); $('scrim').classList.remove('show');
     });
+    // theme toggle
+    $('themeToggle').addEventListener('click', M.toggleTheme);
     // export / import
     $('btnExport').addEventListener('click', function () { M.exportJSON(); M.toast('تم تصدير البيانات', 'ok'); });
     $('btnImport').addEventListener('click', function () { $('importFile').click(); });

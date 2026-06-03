@@ -3,6 +3,7 @@ window.MOA = window.MOA || {};
 (function (M) {
   "use strict";
   function el(t, c) { var e = document.createElement(t); if (c) e.className = c; return e; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]; }); }
   function S() { return M.state; }
   function members() { return S().team.map(function (m) { return m.member; }).filter(Boolean); }
   function contentIds() { return S().content.map(function (c) { return c.id; }).filter(Boolean); }
@@ -12,6 +13,49 @@ window.MOA = window.MOA || {};
     return h;
   }
   function save() { M.save(); }
+
+  /* ---------- filtering (kept out of saved state) ---------- */
+  var contentFilter = { q: '', owner: '', platform: '', status: '', week: '' };
+  var taskFilter = { q: '', owner: '', status: '', priority: '' };
+  function txt(v) { return String(v == null ? '' : v).toLowerCase(); }
+  function anyActive(f) { return Object.keys(f).some(function (k) { return f[k]; }); }
+  function filterContent(arr) {
+    var f = contentFilter, q = txt(f.q);
+    return arr.filter(function (r) {
+      if (f.owner && r.owner !== f.owner) return false;
+      if (f.platform && r.platform !== f.platform) return false;
+      if (f.status && r.status !== f.status) return false;
+      if (f.week && r.week !== f.week) return false;
+      if (q && txt(r.title).indexOf(q) < 0 && txt(r.notes).indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  function filterTasks(arr) {
+    var f = taskFilter, q = txt(f.q);
+    return arr.filter(function (r) {
+      if (f.owner && r.owner !== f.owner) return false;
+      if (f.status && r.status !== f.status) return false;
+      if (f.priority && r.priority !== f.priority) return false;
+      if (q && txt(r.task).indexOf(q) < 0 && txt(r.notes).indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  /* build a search input that re-renders only the table host (keeps focus) */
+  function filterSearch(value, placeholder, onChange) {
+    var inp = el('input', 'filter-input'); inp.type = 'search';
+    inp.placeholder = placeholder; inp.value = value || '';
+    var deb;
+    inp.addEventListener('input', function () { clearTimeout(deb); deb = setTimeout(function () { onChange(inp.value); }, 250); });
+    return inp;
+  }
+  function filterSelect(value, list, placeholder, onChange) {
+    var sel = el('select', 'filter-select');
+    var blank = document.createElement('option'); blank.value = ''; blank.textContent = placeholder; sel.appendChild(blank);
+    (list || []).forEach(function (o) { var op = document.createElement('option'); op.value = o; op.textContent = o; sel.appendChild(op); });
+    sel.value = value || '';
+    sel.addEventListener('change', function () { onChange(sel.value); });
+    return sel;
+  }
 
   M.currentView = 'dashboard';
   M.views = {};
@@ -66,14 +110,39 @@ window.MOA = window.MOA || {};
       { key: 'publishedDate', label: 'تاريخ النشر الفعلي', type: 'date' },
       { key: 'notes', label: 'ملاحظات', type: 'text' }
     ];
-    var card = M.tables.render(S().content, schema, {
+    var opts = {
       onChange: save,
       onAdd: function () { S().content.push({ id: M.nextId(S().content, 'C'), date: '', week: '', platform: '', type: '', title: '', owner: '', status: 'فكرة', assetUrl: '', publishedDate: '', notes: '' }); save(); M.showView('content'); },
       onDelete: function (row) { var a = S().content; a.splice(a.indexOf(row), 1); save(); M.showView('content'); M.toast('تم حذف الصف', 'info'); },
       addLabel: 'إضافة محتوى'
-    });
+    };
     c.appendChild(head('خطة المحتوى', 'تقويم المحتوى — أعطِ كل عنصر رقماً (C-00X) لربط المهام به'));
-    c.appendChild(card);
+
+    var clr = el('button', 'btn btn-soft btn-sm'); clr.textContent = 'مسح الفلاتر';
+    clr.onclick = function () { contentFilter = { q: '', owner: '', platform: '', status: '', week: '' }; M.showView('content'); };
+
+    var host = el('div');
+    function renderTable() {
+      clr.style.display = anyActive(contentFilter) ? '' : 'none';
+      host.innerHTML = '';
+      var rows = filterContent(S().content);
+      if (!rows.length && anyActive(contentFilter)) {
+        var em = el('div', 'empty'); em.textContent = 'لا توجد نتائج مطابقة للفلاتر.';
+        host.appendChild(em);
+      } else {
+        host.appendChild(M.tables.render(rows, schema, opts));
+      }
+    }
+    var bar = el('div', 'filter-bar');
+    bar.appendChild(filterSearch(contentFilter.q, 'بحث في العنوان أو الملاحظات…', function (v) { contentFilter.q = v; renderTable(); }));
+    bar.appendChild(filterSelect(contentFilter.owner, members(), 'كل المسؤولين', function (v) { contentFilter.owner = v; renderTable(); }));
+    bar.appendChild(filterSelect(contentFilter.platform, S().lists.platforms, 'كل المنصات', function (v) { contentFilter.platform = v; renderTable(); }));
+    bar.appendChild(filterSelect(contentFilter.status, S().lists.contentStatuses, 'كل الحالات', function (v) { contentFilter.status = v; renderTable(); }));
+    bar.appendChild(filterSelect(contentFilter.week, S().lists.weeks, 'كل الأسابيع', function (v) { contentFilter.week = v; renderTable(); }));
+    bar.appendChild(clr);
+    c.appendChild(bar);
+    c.appendChild(host);
+    renderTable();
   };
 
   /* ---------- Tasks ---------- */
@@ -91,15 +160,39 @@ window.MOA = window.MOA || {};
       { key: 'overdue', label: 'متأخرة؟', type: 'computed', compute: function (r) { return M.isOverdue(r) ? { text: 'متأخرة', cls: 'tag-late' } : { text: '' }; } },
       { key: 'notes', label: 'ملاحظات', type: 'text' }
     ];
-    var card = M.tables.render(S().tasks, schema, {
+    var opts = {
       rowClass: function (r) { return M.isOverdue(r) ? 'is-late' : ''; },
       onChange: function (row, key) { save(); if (key === 'due' || key === 'status') M.showView('tasks'); },
       onAdd: function () { S().tasks.push({ id: M.nextId(S().tasks, 'T'), task: '', contentId: '', domain: '', owner: '', priority: 'متوسطة', due: '', status: 'لم تبدأ', effort: '', notes: '' }); save(); M.showView('tasks'); },
       onDelete: function (row) { var a = S().tasks; a.splice(a.indexOf(row), 1); save(); M.showView('tasks'); M.toast('تم حذف المهمة', 'info'); },
       addLabel: 'إضافة مهمة'
-    });
+    };
     c.appendChild(head('المهام', 'اربط المهمة بالمحتوى، وحدّد المسؤول والأولوية والحالة — التأخير يُحسب تلقائياً'));
-    c.appendChild(card);
+
+    var clr = el('button', 'btn btn-soft btn-sm'); clr.textContent = 'مسح الفلاتر';
+    clr.onclick = function () { taskFilter = { q: '', owner: '', status: '', priority: '' }; M.showView('tasks'); };
+
+    var host = el('div');
+    function renderTable() {
+      clr.style.display = anyActive(taskFilter) ? '' : 'none';
+      host.innerHTML = '';
+      var rows = filterTasks(S().tasks);
+      if (!rows.length && anyActive(taskFilter)) {
+        var em = el('div', 'empty'); em.textContent = 'لا توجد نتائج مطابقة للفلاتر.';
+        host.appendChild(em);
+      } else {
+        host.appendChild(M.tables.render(rows, schema, opts));
+      }
+    }
+    var bar = el('div', 'filter-bar');
+    bar.appendChild(filterSearch(taskFilter.q, 'بحث في المهمة أو الملاحظات…', function (v) { taskFilter.q = v; renderTable(); }));
+    bar.appendChild(filterSelect(taskFilter.owner, members(), 'كل المسؤولين', function (v) { taskFilter.owner = v; renderTable(); }));
+    bar.appendChild(filterSelect(taskFilter.status, S().lists.taskStatuses, 'كل الحالات', function (v) { taskFilter.status = v; renderTable(); }));
+    bar.appendChild(filterSelect(taskFilter.priority, S().lists.priorities, 'كل الأولويات', function (v) { taskFilter.priority = v; renderTable(); }));
+    bar.appendChild(clr);
+    c.appendChild(bar);
+    c.appendChild(host);
+    renderTable();
   };
 
   /* ---------- Team ---------- */
@@ -197,6 +290,126 @@ window.MOA = window.MOA || {};
     wrap.innerHTML = hl + lk + note;
     c.appendChild(head('كيفية الاستخدام', 'دليل سريع لتشغيل النظام'));
     c.appendChild(wrap);
+  };
+
+  /* ---------- Content Calendar ---------- */
+  var calMonth = null; // {y, m}  m is 0-based
+  var MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  var WEEKDAYS_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function isoDate(y, m, d) { return y + '-' + pad2(m + 1) + '-' + pad2(d); }
+
+  M.views.calendar = function (c) {
+    var tp = M.todayISO().split('-');
+    if (!calMonth) calMonth = { y: +tp[0], m: +tp[1] - 1 };
+    var y = calMonth.y, m = calMonth.m;
+
+    c.appendChild(head('تقويم المحتوى', 'عرض شهري حسب تاريخ النشر (أو التاريخ المخطط) — انقر على عنصر لفتحه في خطة المحتوى'));
+    var wrap = el('div', 'wrap');
+
+    // month navigation bar
+    var nav = el('div', 'cal-nav');
+    var prev = el('button', 'btn btn-ghost btn-sm'); prev.innerHTML = '‹ الشهر السابق';
+    var next = el('button', 'btn btn-ghost btn-sm'); next.innerHTML = 'الشهر التالي ›';
+    var title = el('div', 'cal-title'); title.textContent = MONTHS_AR[m] + ' ' + y;
+    prev.onclick = function () { calMonth = m === 0 ? { y: y - 1, m: 11 } : { y: y, m: m - 1 }; M.showView('calendar'); };
+    next.onclick = function () { calMonth = m === 11 ? { y: y + 1, m: 0 } : { y: y, m: m + 1 }; M.showView('calendar'); };
+    nav.appendChild(prev); nav.appendChild(title); nav.appendChild(next);
+    wrap.appendChild(nav);
+
+    // group content by effective date (publishedDate || date)
+    var byDate = {}, monthCount = 0, prefix = isoDate(y, m, 1).slice(0, 7);
+    S().content.forEach(function (it) {
+      var d = it.publishedDate || it.date;
+      if (!d) return;
+      (byDate[d] = byDate[d] || []).push(it);
+      if (d.slice(0, 7) === prefix) monthCount++;
+    });
+
+    var grid = el('div', 'cal-grid');
+    WEEKDAYS_AR.forEach(function (w) { var h = el('div', 'cal-dow'); h.textContent = w; grid.appendChild(h); });
+
+    var firstDow = new Date(y, m, 1).getDay();         // 0=Sunday
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    var today = M.todayISO();
+    var i;
+    for (i = 0; i < firstDow; i++) grid.appendChild(el('div', 'cal-cell cal-other-month'));
+    for (var d = 1; d <= daysInMonth; d++) {
+      var iso = isoDate(y, m, d);
+      var cell = el('div', 'cal-cell' + (iso === today ? ' is-today' : ''));
+      var dn = el('div', 'cal-daynum'); dn.textContent = d; cell.appendChild(dn);
+      (byDate[iso] || []).forEach(function (it) {
+        var ev = el('button', 'cal-event p-' + M.colorKey(it.status));
+        ev.textContent = it.title || it.id || '—';
+        ev.title = (it.id ? it.id + ' · ' : '') + (it.platform || '') + (it.status ? ' · ' + it.status : '');
+        ev.onclick = function () { M.showView('content'); };
+        cell.appendChild(ev);
+      });
+      grid.appendChild(cell);
+    }
+    wrap.appendChild(grid);
+    if (monthCount === 0) {
+      var note = el('div', 'cal-empty'); note.textContent = 'لا يوجد محتوى مجدول لهذا الشهر.';
+      wrap.appendChild(note);
+    }
+    c.appendChild(wrap);
+  };
+
+  /* ---------- Kanban board (tasks) ---------- */
+  M.views.kanban = function (c) {
+    c.appendChild(head('لوحة كانبان', 'اسحب المهمة بين الأعمدة لتغيير حالتها — المهام المتأخّرة بإطار أحمر'));
+    var statuses = S().lists.taskStatuses;
+    var board = el('div', 'kanban');
+    var draggingId = null;
+
+    statuses.forEach(function (st) {
+      var inCol = S().tasks.filter(function (t) { return t.status === st && (t.task || '').trim(); });
+      var col = el('div', 'kb-col');
+
+      var ch = el('div', 'kb-head');
+      ch.innerHTML = '<span class="kb-col-title">' + esc(st) + '</span><span class="kb-count">' + inCol.length + '</span>';
+      col.appendChild(ch);
+
+      var body = el('div', 'kb-body');
+      inCol.forEach(function (t) {
+        var card = el('div', 'kb-card' + (M.isOverdue(t) ? ' is-late' : ''));
+        card.draggable = true;
+        var pr = t.priority ? '<span class="kb-pill p-' + M.colorKey(t.priority) + '">' + esc(t.priority) + '</span>' : '';
+        var owner = t.owner ? '<span class="kb-owner">' + esc(t.owner) + '</span>' : '';
+        var link = t.contentId ? '<span class="kb-link">' + esc(t.contentId) + '</span>' : '';
+        var due = t.due ? '<span class="kb-due' + (M.isOverdue(t) ? ' is-late' : '') + '">' + esc(t.due) + '</span>' : '';
+        card.innerHTML = '<div class="kb-task">' + esc(t.task) + '</div>' +
+          '<div class="kb-meta">' + owner + pr + link + '</div>' +
+          (due ? '<div class="kb-foot">' + due + '</div>' : '');
+        card.addEventListener('dragstart', function (e) {
+          draggingId = t.id; card.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', t.id); } catch (_) {}
+        });
+        card.addEventListener('dragend', function () { draggingId = null; card.classList.remove('dragging'); });
+        body.appendChild(card);
+      });
+      col.appendChild(body);
+
+      var add = el('button', 'kb-add'); add.innerHTML = '＋ مهمة';
+      add.onclick = function () {
+        S().tasks.push({ id: M.nextId(S().tasks, 'T'), task: '', contentId: '', domain: '', owner: '', priority: 'متوسطة', due: '', status: st, effort: '', notes: '' });
+        save(); M.showView('tasks');
+      };
+      col.appendChild(add);
+
+      col.addEventListener('dragover', function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; col.classList.add('drag-over'); });
+      col.addEventListener('dragleave', function () { col.classList.remove('drag-over'); });
+      col.addEventListener('drop', function (e) {
+        e.preventDefault(); col.classList.remove('drag-over');
+        var id = draggingId || (e.dataTransfer && e.dataTransfer.getData('text/plain'));
+        if (!id) return;
+        var t = S().tasks.filter(function (x) { return x.id === id; })[0];
+        if (t && t.status !== st) { t.status = st; save(); M.showView('kanban'); }
+      });
+      board.appendChild(col);
+    });
+    c.appendChild(board);
   };
 
   /* ---------- nav ---------- */
