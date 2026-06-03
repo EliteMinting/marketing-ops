@@ -174,12 +174,12 @@ svg{display:block}
 .kpi-delta{font-weight:800;font-size:11.5px}
 .kpi-delta.up{color:var(--up)} .kpi-delta.down{color:var(--down)} .kpi-delta.flat{color:var(--muted)}
 
-/* featured (dark) KPI card */
-.kpi--feature{background:linear-gradient(160deg,var(--feature),var(--feature-2))!important;border-color:var(--feature)}
-.kpi--feature .kpi-label{color:var(--feature-muted)}
-.kpi--feature .kpi-num{color:#fff}
-.kpi--feature .kpi-foot{color:var(--feature-muted)}
-.kpi--feature .kpi-accent{display:none}
+/* featured (dark) KPI card — higher specificity so light text wins over .kpi .kpi-num */
+.kpi.kpi--feature{background:linear-gradient(160deg,var(--feature),var(--feature-2))!important;border-color:var(--feature)}
+.kpi.kpi--feature .kpi-label{color:var(--feature-muted)!important}
+.kpi.kpi--feature .kpi-num{color:#fff!important}
+.kpi.kpi--feature .kpi-foot{color:var(--feature-muted)!important}
+.kpi.kpi--feature .kpi-accent{display:none}
 
 /* content */
 .content{grid-area:main;padding:var(--s6);overflow:auto;scroll-behavior:smooth}
