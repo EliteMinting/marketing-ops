@@ -159,10 +159,10 @@ svg{display:block}
 .avatar-xs{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:var(--r-pill);background:var(--primary-50);color:var(--primary-600);font-weight:800;font-size:12px;margin-inline-end:6px;vertical-align:middle}
 
 /* this-week strip */
-.weekstrip{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
-.ws-day{display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-2)}
+.weekstrip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.ws-day{min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-2);overflow:hidden}
 .ws-day.is-today{background:var(--feature);border-color:var(--feature)}
-.ws-dow{font-size:11px;color:var(--muted);font-weight:700}
+.ws-dow{font-size:11px;color:var(--muted);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .ws-day.is-today .ws-dow{color:var(--feature-muted)}
 .ws-num{font-size:18px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
 .ws-day.is-today .ws-num{color:#fff}
@@ -580,7 +580,7 @@ table.data tbody tr:hover .row-del{opacity:1}
 @media (prefers-reduced-motion:reduce){.splash-box,.splash-box img,.splash-ring{animation:none}}
 
 /* ===== responsive ===== */
-@media (max-width:1100px){ .kpis{grid-template-columns:repeat(3,1fr)} .col-3{grid-column:span 6} .col-6,.col-8{grid-column:span 12} }
+@media (max-width:1100px){ .kpis{grid-template-columns:repeat(3,1fr)} .col-3{grid-column:span 6} .col-4,.col-6,.col-8{grid-column:span 12} }
 @media (max-width:920px){
   .app{grid-template-columns:1fr;grid-template-areas:"top" "main"}
   .sidenav{display:none}
@@ -626,6 +626,11 @@ table.data tbody tr:hover .row-del{opacity:1}
   .cal-daynum{font-size:11px}
   .cal-event{font-size:9.5px;padding:3px 5px}
   .filter-input{min-width:0;flex:1 1 100%;max-width:none}
+  /* week strip: tighter so all 7 days fit inside the container */
+  .weekstrip{gap:5px}
+  .ws-day{padding:9px 2px}
+  .ws-dow{font-size:9.5px}
+  .ws-num{font-size:16px}
   /* gantt: narrower label column on phones */
   .gantt{min-width:460px}
   .gantt-row{grid-template-columns:130px 1fr;gap:8px}
