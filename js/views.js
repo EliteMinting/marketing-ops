@@ -737,10 +737,9 @@ window.MOA = window.MOA || {};
     M.currentView = name;
     var c = document.getElementById('view'); c.innerHTML = '';
     M.views[name](c); c.scrollTop = 0;
-    var items = document.querySelectorAll('.nav-item');
+    var items = document.querySelectorAll('[data-view]');
     for (var i = 0; i < items.length; i++) items[i].classList.toggle('is-active', items[i].getAttribute('data-view') === name);
-    document.getElementById('sidenav').classList.remove('open');
-    document.getElementById('scrim').classList.remove('show');
+    if (M.closeSheet) M.closeSheet();
   };
 
 })(window.MOA);
