@@ -93,6 +93,17 @@
   M.onSaved = function () { updateHeader(); M.refreshBadges(); if (M.cloud) M.cloud.scheduleSync(); };
 
   /* ---------- account / cloud auth UI ---------- */
+  function authErr(msg, mode) {
+    msg = String(msg || '');
+    if (/Invalid login credentials/i.test(msg)) return mode === 'signin'
+      ? 'بيانات الدخول غير صحيحة. إن كانت أول مرة استخدم «إنشاء حساب»، وتأكّد من تأكيد بريدك وصحّة كلمة المرور.'
+      : 'تعذّر إنشاء الحساب — تحقّق من البيانات.';
+    if (/Email not confirmed/i.test(msg)) return 'لم يُؤكَّد بريدك بعد — افتح رابط التأكيد في بريدك، أو أوقف «Confirm email» في إعدادات Supabase.';
+    if (/already registered|already exists/i.test(msg)) return 'هذا البريد مسجّل مسبقاً — استخدم تبويب «دخول».';
+    if (/(at least|6 characters|password)/i.test(msg)) return 'كلمة المرور قصيرة (٦ أحرف على الأقل).';
+    if (/rate|too many/i.test(msg)) return 'محاولات كثيرة — انتظر قليلاً ثم أعد المحاولة.';
+    return 'تعذّر: ' + msg;
+  }
   var authModal;
   function buildAuthModal() {
     if (authModal) return authModal;
@@ -127,8 +138,8 @@
       var p = mode === 'signin' ? M.cloud.signIn(email, pw) : M.cloud.signUp(email, pw);
       p.then(function (res) {
         $('authSubmit').disabled = false;
-        if (res.error) { $('authMsg').textContent = 'تعذّر: ' + (res.error.message || 'خطأ'); return; }
-        if (mode === 'signup' && res.data && !res.data.session) { $('authMsg').textContent = 'تم الإنشاء — تحقّق من بريدك لتأكيد الحساب ثم سجّل الدخول.'; return; }
+        if (res.error) { $('authMsg').textContent = authErr(res.error.message, mode); return; }
+        if (mode === 'signup' && res.data && !res.data.session) { $('authMsg').textContent = 'تم الإنشاء — تحقّق من بريدك لتأكيد الحساب، أو أوقف «Confirm email» في إعدادات Supabase ثم سجّل الدخول.'; return; }
         close(); M.toast('مرحباً بك 👋', 'ok');
       }).catch(function (e) { $('authSubmit').disabled = false; $('authMsg').textContent = 'تعذّر الاتصال: ' + (e && e.message || ''); });
     };
