@@ -90,6 +90,25 @@
     });
   };
 
+  /* unread messages badge (sidebar «الرسائل» + mobile «المزيد» dot) */
+  function setMsgBadge(n) {
+    [['msgBadge', 'nav-badge'], ['msgBadgeBn', 'dot-badge']].forEach(function (p) {
+      var b = $(p[0]); if (!b) return;
+      if (n > 0) { b.textContent = p[1] === 'dot-badge' ? '' : n; b.hidden = false; b.className = p[1] + ' badge-late'; b.title = n + ' رسالة غير مقروءة'; }
+      else { b.hidden = true; b.textContent = ''; }
+    });
+  }
+  M.refreshMsgBadge = function () {
+    if (!M.cloud || !M.cloud.available() || !M.cloud.user()) { setMsgBadge(0); return; }
+    M.cloud.getMyTeam().then(function (team) {
+      if (!team) { setMsgBadge(0); return; }
+      M.cloud.startMessages(team.team_id);
+      var since = '1970-01-01T00:00:00Z';
+      try { since = localStorage.getItem('moa.msg.read.' + team.team_id) || since; } catch (e) {}
+      M.cloud.countUnread(team.team_id, since).then(setMsgBadge);
+    });
+  };
+
   M.onSaved = function () { updateHeader(); M.refreshBadges(); if (M.cloud) M.cloud.scheduleSync(); };
 
   /* ---------- account / cloud auth UI ---------- */
@@ -209,11 +228,22 @@
     M.showView('dashboard');
     setTimeout(dismissSplash, reduceMotion ? 250 : 950);
 
-    // optional cloud auth + sync
+    // optional cloud auth + sync + team messaging
     if (M.cloud) {
-      M.cloud.onAuth(function (u) { refreshAvatar(u); if (u && authModal) authModal._close(); });
+      M.cloud.onAuth(function (u) {
+        refreshAvatar(u);
+        if (u && authModal) authModal._close();
+        if (u) { M.refreshMsgBadge(); }
+        else { if (M.cloud.stopMessages) M.cloud.stopMessages(); setMsgBadge(0); }
+      });
+      M.cloud.onIncoming = function (m) {
+        var u = M.cloud.user(); if (!u || m.sender_id === u.id) return;
+        if (M.currentView === 'messages') return;
+        M.refreshMsgBadge(); M.toast('📩 رسالة جديدة', 'info');
+      };
       M.cloud.init();
       refreshAvatar(M.cloud.user());
+      M.refreshMsgBadge();
     }
     var acc = $('btnAccount'); if (acc) acc.addEventListener('click', M.accountClick);
 

@@ -788,11 +788,113 @@ window.MOA = window.MOA || {};
     setTimeout(function () { try { ta.focus(); } catch (e) {} }, 0);
   };
 
+  /* ---------- Team Messages (manager ⇄ workers) ---------- */
+  function msgReadKey(teamId) { return 'moa.msg.read.' + teamId; }
+  function msgInfoCard(text) { var d = el('div', 'card'); d.innerHTML = '<div style="color:var(--muted);font-size:13.5px;line-height:1.9">' + esc(text) + '</div>'; return d; }
+  function msgSignInCard() {
+    var d = el('div', 'card');
+    d.innerHTML = '<div class="card-title">سجّل الدخول للمراسلة</div><p style="color:var(--muted);font-size:13px;line-height:1.8">المراسلة تتطلب حساباً لربطك بفريقك.</p>';
+    var b = el('button', 'btn btn-primary'); b.textContent = 'تسجيل الدخول'; b.style.marginTop = '10px';
+    b.onclick = function () { if (M.accountClick) M.accountClick(); };
+    d.appendChild(b); return d;
+  }
+  function msgTeamSetup() {
+    var grid = el('div', 'settings-grid');
+    var c1 = el('div', 'card'); c1.innerHTML = '<div class="card-title">أنشئ فريقاً (مدير)</div><p style="color:var(--muted);font-size:12.5px;margin-bottom:10px">تصبح مدير الفريق وتحصل على رمز تشاركه مع العمال.</p>';
+    var n = el('input', 'auth-inp'); n.placeholder = 'اسم الفريق'; n.value = 'فريق التسويق';
+    var b1 = el('button', 'btn btn-primary btn-sm'); b1.textContent = 'إنشاء الفريق';
+    b1.onclick = function () { b1.disabled = true; M.cloud.createTeam(n.value.trim()).then(function (res) { if (res.error) { M.toast('تعذّر: ' + res.error.message, 'err'); b1.disabled = false; return; } M.toast('تم إنشاء الفريق', 'ok'); M.showView('messages'); }); };
+    c1.appendChild(n); c1.appendChild(b1);
+    var c2 = el('div', 'card'); c2.innerHTML = '<div class="card-title">انضم برمز (عامل)</div><p style="color:var(--muted);font-size:12.5px;margin-bottom:10px">أدخل رمز الفريق الذي أعطاك إياه المدير.</p>';
+    var code = el('input', 'auth-inp'); code.placeholder = 'رمز الفريق'; code.style.textTransform = 'uppercase';
+    var dn = el('input', 'auth-inp'); dn.placeholder = 'اسمك (اختياري)';
+    var b2 = el('button', 'btn btn-primary btn-sm'); b2.textContent = 'انضمام';
+    b2.onclick = function () { b2.disabled = true; M.cloud.joinTeam(code.value, dn.value.trim()).then(function (res) { if (res.error) { M.toast('تعذّر الانضمام: ' + res.error.message, 'err'); b2.disabled = false; return; } M.toast('تم الانضمام للفريق', 'ok'); M.showView('messages'); }); };
+    c2.appendChild(code); c2.appendChild(dn); c2.appendChild(b2);
+    grid.appendChild(c1); grid.appendChild(c2); return grid;
+  }
+  function msgRenderTeam(wrap, team) {
+    var meId = M.cloud.user().id, members = {};
+    function nameOf(id) { return (members[id] && members[id].display_name) || (id === meId ? 'أنا' : '—'); }
+    var hd = el('div', 'card'); hd.style.marginBottom = '12px';
+    hd.innerHTML = '<div class="card-title">' + esc(team.name) +
+      (team.isManager ? ' <span class="msg-code">رمز الفريق: <b>' + esc(team.join_code) + '</b></span>' : '') +
+      '</div><div class="msg-members" id="msgMembers"><span class="ct-sub">جارٍ تحميل الأعضاء…</span></div>';
+    wrap.appendChild(hd);
+
+    var chat = el('div', 'chat');
+    var msgs = el('div', 'chat-msgs'); chat.appendChild(msgs);
+    var row = el('div', 'chat-input');
+    var rsel = el('select', 'filter-select');
+    var ta = el('textarea'); ta.rows = 1; ta.placeholder = 'اكتب رسالة…';
+    var send = el('button', 'btn btn-primary'); send.textContent = 'إرسال';
+    row.appendChild(rsel); row.appendChild(ta); row.appendChild(send);
+    chat.appendChild(row); wrap.appendChild(chat);
+
+    function renderRecipients() {
+      rsel.innerHTML = '';
+      if (team.isManager) {
+        var ob = document.createElement('option'); ob.value = ''; ob.textContent = '📢 إعلان للجميع'; rsel.appendChild(ob);
+        Object.keys(members).forEach(function (id) { if (id === meId) return; var o = document.createElement('option'); o.value = id; o.textContent = '↪ ' + members[id].display_name; rsel.appendChild(o); });
+      } else { var o = document.createElement('option'); o.value = team.owner_id; o.textContent = '↪ المدير'; rsel.appendChild(o); }
+    }
+    function bubble(m) {
+      var mine = m.sender_id === meId, b = el('div', 'msg ' + (mine ? 'user' : 'ai'));
+      var tag = (m.recipient_id == null) ? '<span class="msg-tag">إعلان</span>' : '';
+      var who = mine ? '' : '<span class="msg-who">' + esc(nameOf(m.sender_id)) + '</span>';
+      b.innerHTML = who + tag + '<span class="msg-text">' + esc(m.body) + '</span>'; return b;
+    }
+    function addMsg(m) { msgs.appendChild(bubble(m)); msgs.scrollTop = msgs.scrollHeight; }
+    function markRead() { try { localStorage.setItem(msgReadKey(team.team_id), new Date().toISOString()); } catch (e) {} if (M.refreshMsgBadge) M.refreshMsgBadge(); }
+
+    M.cloud.listMembers(team.team_id).then(function (list) {
+      list.forEach(function (mm) { members[mm.user_id] = { display_name: mm.display_name || 'عضو', role: mm.role }; });
+      var mc = document.getElementById('msgMembers');
+      if (mc) mc.innerHTML = list.map(function (mm) { return '<span class="msg-mem' + (mm.role === 'manager' ? ' is-mgr' : '') + '">' + esc(mm.display_name || 'عضو') + (mm.role === 'manager' ? ' • مدير' : '') + '</span>'; }).join('');
+      renderRecipients();
+      return M.cloud.listMessages(team.team_id);
+    }).then(function (list) {
+      list = list || [];
+      if (!list.length) { var e = el('div', 'chat-hint'); e.textContent = 'لا رسائل بعد — ابدأ المحادثة.'; msgs.appendChild(e); }
+      list.forEach(addMsg); markRead();
+    });
+
+    M.cloud.onView = function (m) { if (M.currentView !== 'messages') return; addMsg(m); if (m.sender_id !== meId) markRead(); };
+    M.cloud.startMessages(team.team_id);
+
+    function doSend() {
+      var body = ta.value.trim(); if (!body) return;
+      send.disabled = true;
+      M.cloud.sendMessage(team.team_id, rsel.value || null, body).then(function (res) {
+        send.disabled = false;
+        if (res.error) { M.toast('تعذّر الإرسال: ' + res.error.message, 'err'); return; }
+        ta.value = ''; ta.style.height = 'auto';
+      });
+    }
+    send.onclick = doSend;
+    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+    ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
+  }
+  M.views.messages = function (c) {
+    c.appendChild(head('الرسائل', 'تواصل المدير مع الفريق — إعلانات ورسائل مباشرة'));
+    var wrap = el('div', 'wrap'); c.appendChild(wrap);
+    M.cloud.onView = null;
+    if (!M.cloud || !M.cloud.available()) { wrap.appendChild(msgInfoCard('المراسلة تتطلب اتصالاً بالسحابة (تحقّق من الإنترنت).')); return; }
+    if (!M.cloud.user()) { wrap.appendChild(msgSignInCard()); return; }
+    var ld = el('div', 'empty'); ld.textContent = 'جارٍ التحميل…'; wrap.appendChild(ld);
+    M.cloud.getMyTeam().then(function (team) {
+      wrap.innerHTML = '';
+      if (!team) { wrap.appendChild(msgTeamSetup()); return; }
+      msgRenderTeam(wrap, team);
+    }).catch(function () { wrap.innerHTML = ''; wrap.appendChild(msgInfoCard('تعذّر تحميل بيانات الفريق.')); });
+  };
+
   /* ---------- nav ---------- */
   var TITLES = {
     dashboard: 'لوحة التحكم', assistant: 'المساعد الذكي', content: 'خطة المحتوى',
     calendar: 'تقويم المحتوى', tasks: 'المهام', kanban: 'لوحة كانبان', gantt: 'المخطط الزمني',
-    team: 'الفريق', settings: 'الإعدادات', help: 'كيفية الاستخدام', search: 'نتائج البحث'
+    team: 'الفريق', settings: 'الإعدادات', help: 'كيفية الاستخدام', search: 'نتائج البحث',
+    messages: 'الرسائل'
   };
   M.showView = function (name) {
     if (!M.views[name]) name = 'dashboard';

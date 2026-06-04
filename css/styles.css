@@ -315,6 +315,17 @@ svg{display:block}
 .aia-row.bad{color:var(--late-ink)}
 .aia-bar{display:flex;gap:8px;margin-top:10px}
 
+/* ===== team messages ===== */
+.msg-code{font-weight:500;font-size:12px;color:var(--muted)}
+.msg-code b{color:var(--primary-600);background:var(--primary-50);padding:2px 8px;border-radius:var(--r-pill);letter-spacing:1px;font-family:monospace}
+.msg-members{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.msg-mem{font-size:11.5px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px 10px}
+.msg-mem.is-mgr{color:var(--primary-600);background:var(--primary-50);border-color:transparent}
+.msg-tag{display:inline-block;font-size:10px;font-weight:800;color:var(--hold-ink);background:var(--hold);border-radius:var(--r-pill);padding:1px 8px;margin-bottom:4px}
+.msg-who{display:block;font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:2px}
+.msg-text{display:block;white-space:pre-wrap;word-break:break-word}
+.chat-input .filter-select{flex:0 0 auto;max-width:150px}
+
 /* ===== table ===== */
 .table-tools{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4)}
 .table-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh-sm);overflow:hidden}

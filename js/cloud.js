@@ -65,4 +65,65 @@ window.MOA = window.MOA || {};
     clearTimeout(syncTimer);
     syncTimer = setTimeout(function () { M.cloud.push(); }, 1200);
   };
+
+  /* ---------- teams & messaging (manager ⇄ workers) ---------- */
+  var msgChannel = null;
+  function defaultName() { return (user && user.email ? String(user.email).split('@')[0] : 'مستخدم'); }
+
+  /* returns {team_id,name,join_code,role,owner_id} or null */
+  M.cloud.getMyTeam = function () {
+    if (!client || !user) return Promise.resolve(null);
+    return client.from('team_members').select('role, teams(id,name,join_code,owner_id)').eq('user_id', user.id).maybeSingle()
+      .then(function (res) {
+        if (res.error || !res.data || !res.data.teams) return null;
+        var t = res.data.teams;
+        return { team_id: t.id, name: t.name, join_code: t.join_code, owner_id: t.owner_id, role: res.data.role, isManager: res.data.role === 'manager' };
+      }).catch(function () { return null; });
+  };
+  M.cloud.createTeam = function (name) {
+    return client.rpc('create_team', { p_name: name || 'فريق التسويق', p_display: defaultName() });
+  };
+  M.cloud.joinTeam = function (code, display) {
+    return client.rpc('join_team', { p_code: String(code || '').trim().toUpperCase(), p_display: display || defaultName() });
+  };
+  M.cloud.listMembers = function (teamId) {
+    return client.from('team_members').select('user_id, display_name, role').eq('team_id', teamId)
+      .then(function (res) { return (res.data) || []; });
+  };
+  M.cloud.listMessages = function (teamId) {
+    return client.from('messages').select('id, sender_id, recipient_id, body, created_at').eq('team_id', teamId)
+      .order('created_at', { ascending: true }).limit(300)
+      .then(function (res) { return (res.data) || []; });
+  };
+  M.cloud.countUnread = function (teamId, sinceISO) {
+    if (!client || !user) return Promise.resolve(0);
+    return client.from('messages').select('id', { count: 'exact', head: true })
+      .eq('team_id', teamId).gt('created_at', sinceISO).neq('sender_id', user.id)
+      .then(function (res) { return res.count || 0; }).catch(function () { return 0; });
+  };
+  M.cloud.sendMessage = function (teamId, recipientId, body) {
+    return client.from('messages').insert({ team_id: teamId, sender_id: user.id, recipient_id: recipientId || null, body: body });
+  };
+  /* one realtime channel per team; two assignable handler slots:
+     onIncoming (background, for unread badge) and onView (live messages view) */
+  M.cloud.onIncoming = null;
+  M.cloud.onView = null;
+  M.cloud.msgTeam = null;
+  M.cloud.startMessages = function (teamId) {
+    if (!client || !teamId || M.cloud.msgTeam === teamId) return;
+    M.cloud.stopMessages();
+    M.cloud.msgTeam = teamId;
+    msgChannel = client.channel('msgs-' + teamId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'team_id=eq.' + teamId },
+        function (p) {
+          if (typeof M.cloud.onIncoming === 'function') { try { M.cloud.onIncoming(p.new); } catch (e) {} }
+          if (typeof M.cloud.onView === 'function') { try { M.cloud.onView(p.new); } catch (e) {} }
+        })
+      .subscribe();
+  };
+  M.cloud.stopMessages = function () {
+    if (msgChannel && client) { try { client.removeChannel(msgChannel); } catch (e) {} }
+    msgChannel = null; M.cloud.msgTeam = null;
+  };
 })(window.MOA);
+
