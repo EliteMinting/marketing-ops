@@ -90,7 +90,61 @@
     });
   };
 
-  M.onSaved = function () { updateHeader(); M.refreshBadges(); };
+  M.onSaved = function () { updateHeader(); M.refreshBadges(); if (M.cloud) M.cloud.scheduleSync(); };
+
+  /* ---------- account / cloud auth UI ---------- */
+  var authModal;
+  function buildAuthModal() {
+    if (authModal) return authModal;
+    authModal = document.createElement('div');
+    authModal.className = 'modal auth-modal';
+    authModal.innerHTML =
+      '<h3 id="authTitle">تسجيل الدخول</h3>' +
+      '<div class="auth-tabs"><button class="auth-tab is-active" data-mode="signin">دخول</button><button class="auth-tab" data-mode="signup">إنشاء حساب</button></div>' +
+      '<input class="auth-inp" id="authEmail" type="email" placeholder="البريد الإلكتروني" autocomplete="email">' +
+      '<input class="auth-inp" id="authPw" type="password" placeholder="كلمة المرور (٦+ أحرف)">' +
+      '<div class="auth-msg" id="authMsg"></div>' +
+      '<div class="modal-actions"><button class="btn btn-primary" id="authSubmit">دخول</button><button class="btn btn-ghost" id="authCancel">إلغاء</button></div>' +
+      '<div class="auth-note">تُحفظ بياناتك السحابية مرتبطة بحسابك (لكل مستخدم بياناته). بدون تسجيل دخول يعمل الموقع محلياً كالمعتاد.</div>';
+    document.body.appendChild(authModal);
+    var mode = 'signin';
+    function setMode(m) {
+      mode = m;
+      authModal.querySelectorAll('.auth-tab').forEach(function (t) { t.classList.toggle('is-active', t.getAttribute('data-mode') === m); });
+      $('authTitle').textContent = m === 'signin' ? 'تسجيل الدخول' : 'إنشاء حساب';
+      $('authSubmit').textContent = m === 'signin' ? 'دخول' : 'إنشاء حساب';
+      $('authMsg').textContent = '';
+    }
+    authModal.querySelectorAll('.auth-tab').forEach(function (t) { t.onclick = function () { setMode(t.getAttribute('data-mode')); }; });
+    function close() { authModal.classList.remove('show'); $('scrim').classList.remove('show'); }
+    authModal._open = function () { setMode('signin'); $('authEmail').value = ''; $('authPw').value = ''; $('authMsg').textContent = ''; authModal.classList.add('show'); $('scrim').classList.add('show'); setTimeout(function () { $('authEmail').focus(); }, 0); };
+    authModal._close = close;
+    $('authCancel').onclick = close;
+    $('authSubmit').onclick = function () {
+      var email = $('authEmail').value.trim(), pw = $('authPw').value;
+      if (!email || pw.length < 6) { $('authMsg').textContent = 'أدخل بريداً صحيحاً وكلمة مرور (٦ أحرف على الأقل).'; return; }
+      $('authSubmit').disabled = true; $('authMsg').textContent = 'جارٍ…';
+      var p = mode === 'signin' ? M.cloud.signIn(email, pw) : M.cloud.signUp(email, pw);
+      p.then(function (res) {
+        $('authSubmit').disabled = false;
+        if (res.error) { $('authMsg').textContent = 'تعذّر: ' + (res.error.message || 'خطأ'); return; }
+        if (mode === 'signup' && res.data && !res.data.session) { $('authMsg').textContent = 'تم الإنشاء — تحقّق من بريدك لتأكيد الحساب ثم سجّل الدخول.'; return; }
+        close(); M.toast('مرحباً بك 👋', 'ok');
+      }).catch(function (e) { $('authSubmit').disabled = false; $('authMsg').textContent = 'تعذّر الاتصال: ' + (e && e.message || ''); });
+    };
+    return authModal;
+  }
+  function refreshAvatar(u) {
+    var a = $('btnAccount'); if (!a) return;
+    if (u) { a.classList.add('is-auth'); a.title = u.email || 'الحساب'; a.innerHTML = '<span>' + ((u.email || '؟')[0] || '؟').toUpperCase() + '</span>'; }
+    else { a.classList.remove('is-auth'); a.title = 'تسجيل الدخول'; a.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>'; }
+  }
+  M.accountClick = function () {
+    if (!M.cloud || !M.cloud.available()) { M.toast('المزامنة السحابية غير متاحة الآن (تحقّق من الاتصال).', 'info'); return; }
+    var u = M.cloud.user();
+    if (u) { M.confirm('الحساب', 'مسجّل الدخول: ' + (u.email || '') + ' — تسجيل الخروج؟', function () { M.cloud.signOut(); M.toast('تم تسجيل الخروج', 'info'); }); }
+    else { buildAuthModal()._open(); }
+  };
   M.saveQuiet = M.save;
 
   /* toast */
@@ -143,6 +197,14 @@
     M.refreshBadges();
     M.showView('dashboard');
     setTimeout(dismissSplash, reduceMotion ? 250 : 950);
+
+    // optional cloud auth + sync
+    if (M.cloud) {
+      M.cloud.onAuth(function (u) { refreshAvatar(u); if (u && authModal) authModal._close(); });
+      M.cloud.init();
+      refreshAvatar(M.cloud.user());
+    }
+    var acc = $('btnAccount'); if (acc) acc.addEventListener('click', M.accountClick);
 
     // nav — covers the desktop sidebar, the mobile bottom bar, and the «المزيد» sheet
     var navItems = document.querySelectorAll('[data-view]');

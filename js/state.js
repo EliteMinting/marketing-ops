@@ -54,6 +54,7 @@ window.MOA = window.MOA || {};
   };
 
   M.resetToExamples = function(){ M.state=migrate(clone(M.SEED)); M.save(); };
+  M.loadFromObject = function(obj){ M.state=migrate(obj); M.save(); return M.state; };
   M.clearAll = function(){
     M.state.content=[]; M.state.tasks=[]; M.state.team=[]; M.save();
   };
