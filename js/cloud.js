@@ -30,6 +30,9 @@ window.MOA = window.MOA || {};
 
   M.cloud.signUp = function (email, pw) { return client.auth.signUp({ email: email, password: pw }); };
   M.cloud.signIn = function (email, pw) { return client.auth.signInWithPassword({ email: email, password: pw }); };
+  M.cloud.signInWithGoogle = function () {
+    return client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+  };
   M.cloud.signOut = function () { return client.auth.signOut(); };
 
   /* pull this user's cloud workspace into local state; if none, push current local as first sync */

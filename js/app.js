@@ -131,6 +131,8 @@
     authModal.innerHTML =
       '<h3 id="authTitle">تسجيل الدخول</h3>' +
       '<div class="auth-tabs"><button class="auth-tab is-active" data-mode="signin">دخول</button><button class="auth-tab" data-mode="signup">إنشاء حساب</button></div>' +
+      '<button class="btn-google" id="authGoogle"><svg viewBox="0 0 48 48" width="18" height="18"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.1 0 24 0 14.6 0 6.4 5.4 2.5 13.2l7.9 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.6c0-1.6-.1-3.1-.4-4.6H24v9.1h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 6.6-9.6 6.6-17z"/><path fill="#FBBC05" d="M10.4 28.3c-.5-1.5-.8-3-.8-4.8s.3-3.3.8-4.8l-7.9-6.1C.9 16.1 0 19.9 0 23.5s.9 7.4 2.5 10.9l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.1 0 11.3-2 15-5.5l-7.1-5.5c-2 1.3-4.6 2.1-7.9 2.1-6.3 0-11.7-3.7-13.6-9.8l-7.9 6.1C6.4 42.6 14.6 48 24 48z"/></svg><span>المتابعة عبر Google</span></button>' +
+      '<div class="auth-or"><span>أو</span></div>' +
       '<input class="auth-inp" id="authEmail" type="email" placeholder="البريد الإلكتروني" autocomplete="email">' +
       '<input class="auth-inp" id="authPw" type="password" placeholder="كلمة المرور (٦+ أحرف)">' +
       '<div class="auth-msg" id="authMsg"></div>' +
@@ -150,6 +152,12 @@
     authModal._open = function () { setMode('signin'); $('authEmail').value = ''; $('authPw').value = ''; $('authMsg').textContent = ''; authModal.classList.add('show'); $('scrim').classList.add('show'); setTimeout(function () { $('authEmail').focus(); }, 0); };
     authModal._close = close;
     $('authCancel').onclick = close;
+    $('authGoogle').onclick = function () {
+      $('authMsg').textContent = 'جارٍ التحويل إلى Google…';
+      M.cloud.signInWithGoogle().then(function (res) {
+        if (res && res.error) $('authMsg').textContent = 'تعذّر فتح Google: ' + (res.error.message || '');
+      }).catch(function (e) { $('authMsg').textContent = 'تعذّر فتح Google: ' + (e && e.message || ''); });
+    };
     $('authSubmit').onclick = function () {
       var email = $('authEmail').value.trim(), pw = $('authPw').value;
       if (!email || pw.length < 6) { $('authMsg').textContent = 'أدخل بريداً صحيحاً وكلمة مرور (٦ أحرف على الأقل).'; return; }
